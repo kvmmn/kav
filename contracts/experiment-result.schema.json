@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kav.dev/contracts/v0/experiment-result.schema.json",
+  "title": "ExperimentResult",
+  "description": "The 'report honestly' contract. The host returns what its sovereign evaluator measured. KAV accepts it as-is or rejects the run as invalid — it never reinterprets values (Law 1).",
+  "type": "object",
+  "required": ["experiment_id", "status", "evidence"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "0.1" },
+    "experiment_id": {
+      "type": "string",
+      "pattern": "^exp-[a-z0-9-]{6,64}$",
+      "description": "Must match the ExperimentSpec exactly. Law 3 lineage anchor."
+    },
+    "status": {
+      "enum": ["completed", "failed", "timeout", "rejected"],
+      "description": "'completed' means evidence is valid measurement. All other statuses are still valuable findings (principle 8.12)."
+    },
+    "evidence": {
+      "type": "object",
+      "required": [],
+      "additionalProperties": false,
+      "properties": {
+        "metric_value": { "type": ["number", "null"], "description": "What the host evaluator measured. Null unless status=completed." },
+        "cost_actual": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "wall_time_seconds": { "type": "integer", "minimum": 0 },
+            "cost_units": { "type": "number", "minimum": 0 },
+            "compute_hours": { "type": "number", "minimum": 0 }
+          },
+          "description": "What the run actually cost (principle 8.11)."
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ref"],
+            "additionalProperties": false,
+            "properties": {
+              "ref": { "type": "string", "description": "URI/reference to a stored artifact." },
+              "kind": { "type": "string" }
+            }
+          },
+          "description": "Pointers to logs, models, plots. References only — payloads live in host storage."
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "description": "Required when status != completed."
+    },
+    "completed_at": { "type": "string", "format": "date-time" }
+  }
+}

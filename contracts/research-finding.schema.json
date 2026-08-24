@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kav.dev/contracts/v0/research-finding.schema.json",
+  "title": "ResearchFinding",
+  "description": "The memory record. Durable knowledge distilled from evidence, with full lineage back to the experiment that produced it (Law 3). Project-local forever in V1 (ADR-001).",
+  "type": "object",
+  "required": ["finding_id", "project_id", "experiment_id", "kind", "statement", "confidence", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "0.1" },
+    "finding_id": {
+      "type": "string",
+      "pattern": "^fnd-[a-z0-9-]{6,64}$",
+      "description": "Unique, immutable identity of this knowledge record."
+    },
+    "project_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,63}$",
+      "description": "Owner project. Findings never leave this scope in V1 (Law 4)."
+    },
+    "experiment_id": {
+      "type": "string",
+      "pattern": "^exp-[a-z0-9-]{6,64}$",
+      "description": "The experiment whose evidence produced this finding. Law 3: no claim without lineage."
+    },
+    "hypothesis_id": {
+      "type": "string",
+      "pattern": "^hyp-[a-z0-9-]{6,64}$",
+      "description": "The hypothesis that was tested."
+    },
+    "kind": {
+      "enum": [
+        "confirmed",
+        "refuted",
+        "harmful",
+        "inconclusive",
+        "operational"
+      ],
+      "description": "What kind of knowledge this is. Failures are first-class kinds, not errors (principle 8.12)."
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 1000,
+      "description": "The knowledge in one self-contained sentence, understandable without reading the experiment. E.g. 'Raising model.learning_rate above 0.05 degraded correlation on all 3 trials.'"
+    },
+    "conditions": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "config_snapshot": { "type": "object", "description": "Relevant config at time of finding." },
+        "data_ref": { "type": "string", "description": "Dataset identity, if findings are data-dependent." }
+      },
+      "description": "Scope of validity — under what conditions this knowledge holds. Enables ADR-004 rejuvenation: when conditions change, refuted findings may be re-tested."
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": ["number", "null"] },
+        "baseline_value": { "type": ["number", "null"] },
+        "delta": { "type": ["number", "null"] },
+        "cost_units": { "type": ["number", "null"] }
+      },
+      "description": "Quantitative summary copied from evidence. Copied, not referenced, so memory stays queryable without artifact storage."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "KAV's confidence in this finding. Single-trial findings start low; confirmations raise it."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Free-form retrieval tags (parameter names, strategy names). Powers top-k context selection (ADR-004 Q1)."
+    },
+    "superseded_by": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "finding_id of a newer finding that replaces this one. Findings are never deleted — only superseded (immutability)."
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

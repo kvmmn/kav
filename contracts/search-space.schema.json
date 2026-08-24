@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kav.dev/contracts/v0/search-space.schema.json",
+  "title": "SearchSpace",
+  "description": "The 'show your options' contract. Declares everything the host allows KAV to try, as typed parameters — not code. A point in this space is a complete configuration; an ExperimentSpec selects exactly one point (Law 2).",
+  "type": "object",
+  "required": ["project_id", "parameters"],
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,63}$",
+      "description": "Must match the ProjectManifest's project_id."
+    },
+    "schema_version": { "type": "string", "const": "0.1" },
+    "parameters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/parameter" },
+      "description": "Typed, bounded parameters. Each is independently settable; combinations are formed by KAV, one hypothesis at a time (ADR-002)."
+    },
+    "defaults": {
+      "type": "object",
+      "description": "The champion/baseline configuration: parameter name -> value. Every experiment starts from here and changes as little as possible."
+    },
+    "notes": { "type": "string", "maxLength": 2000 }
+  },
+  "$defs": {
+    "parameter": {
+      "type": "object",
+      "required": ["name", "type", "domain"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_.]{0,63}$",
+          "description": "Parameter path in the host's config (e.g. 'model.learning_rate')."
+        },
+        "type": {
+          "enum": ["number", "integer", "categorical", "boolean"],
+          "description": "Deliberately minimal type system. No expressions, no functions, no code (Law 5)."
+        },
+        "domain": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "min", "max"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "range" },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "scale": { "enum": ["linear", "log"], "default": "linear" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind", "values"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "set" },
+                "values": {
+                  "type": "array",
+                  "minItems": 2,
+                  "uniqueItems": true,
+                  "items": { "type": ["string", "number", "boolean"] }
+                }
+              }
+            }
+          ],
+          "description": "Bounded domain. Every parameter MUST be finite and enumerable — unbounded search spaces are rejected (Law 2)."
+        },
+        "mutable": {
+          "type": "boolean",
+          "default": true,
+          "description": "false = frozen for now; declared but excluded from current experiments."
+        },
+        "cost_hint": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional relative cost of varying this parameter, to inform budgeting."
+        },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}
