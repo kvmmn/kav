@@ -58,7 +58,7 @@ def create_kav_agent(
     )
 
 
-def make_openrouter_model(model_name: str = "nvidia/nemotron-3-ultra-550b-a55b:free") -> Any:
+def make_openrouter_model(model_name: str = "nvidia/nemotron-3-super-120b-a12b:free") -> Any:
     """ChatOpenAI client configured for OpenRouter's free tier.
 
     Requires OPENROUTER_API_KEY in the environment.

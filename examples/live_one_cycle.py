@@ -105,7 +105,7 @@ config = {"recursion_limit": 150}
 messages = [{"role": "user", "content": MISSION}]
 
 # Multi-turn loop: agent thinks/issues → host executes honestly → agent continues.
-for turn in range(6):
+for turn in range(4):
     state = agent.invoke({"messages": messages}, config=config)
     messages = state["messages"]
     pending = run_issued_specs()
