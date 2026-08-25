@@ -29,7 +29,8 @@ YOUR LOOP:
 - observe(): start here. Read champion, recent experiments, findings, failure streak.
 - Form ONE falsifiable hypothesis from a gap in knowledge.
 - Draft an ExperimentSpec as JSON matching the contract; check_spec() it;
-  if INVALID, fix and re-check; if VALID, issue_spec() it.
+  if INVALID, fix and re-check; if VALID, issue_spec() it. Note: the spec's
+  reproducibility object requires a "seed" (integer).
 - After results arrive (ingest_result by the runner), analyze and record_finding()
   with kind confirmed/refuted/harmful/inconclusive/operational and full lineage.
 - If evidence beats the champion, propose promotion — promotion happens only via
@@ -39,12 +40,42 @@ Be economical: change as little as possible from defaults per experiment.
 """
 
 
-def create_kav_agent(memory: ProjectMemory, model: str = "openai:gpt-5-mini") -> Any:
-    """Build the KAV research agent bound to one project's memory."""
+def create_kav_agent(
+    memory: ProjectMemory,
+    model: Any = None,
+) -> Any:
+    """Build the KAV research agent bound to one project's memory.
+
+    `model` may be a langchain BaseChatModel (e.g. ChatOpenAI pointed at
+    OpenRouter) or a deepagents model string. Defaults to openai:gpt-5-mini.
+    """
     from deepagents import create_deep_agent
 
     return create_deep_agent(
-        model=model,
+        model=model if model is not None else "openai:gpt-5-mini",
         tools=make_kav_tools(memory),
         system_prompt=SYSTEM_PROMPT,
+    )
+
+
+def make_openrouter_model(model_name: str = "nvidia/nemotron-3-ultra-550b-a55b:free") -> Any:
+    """ChatOpenAI client configured for OpenRouter's free tier.
+
+    Requires OPENROUTER_API_KEY in the environment.
+    """
+    import os
+
+    from langchain_openai import ChatOpenAI
+
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        raise RuntimeError(
+            "Set OPENROUTER_API_KEY in your environment before running a live cycle."
+        )
+    return ChatOpenAI(
+        model=model_name,
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url="https://openrouter.ai/api/v1",
+        temperature=0.2,
+        max_retries=8,
+        request_timeout=120,
     )
