@@ -1,7 +1,11 @@
-# Numerai Adapter — Paper Exercise Findings
+# Contract Stress Test — Paper Exercise Notes
 _Date: 2026-08-25 · Script: `examples/numerai/paper_exercise.py`_
 
-## Result: contracts held. 0 hard failures, 2 design observations.
+Method note on validating KAV v0.1 contracts against a synthetic domain-shaped
+fixture. This documents **tool contract ergonomics**, not host-project research
+findings.
+
+## Result: contracts held. Zero hard failures, two design observations.
 
 ### What worked cleanly
 - Manifest: composite metric (`corr_plus_tc`), forbidden actions, host-owned evaluator.

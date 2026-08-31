@@ -1,25 +1,46 @@
-# KAV Knowledge Base
+# KAV Documentation
 
-Living documentation for the KAV project (**Knowledge through Adaptive Validation** — *Think. Test. Learn.*).
+Living documentation for **KAV** (*Knowledge through Adaptive Validation*).
 
-Master reference: [KAV_Product_and_Architecture_Master_Document.md](../KAV_Product_and_Architecture_Master_Document.md)
+## Start here
+
+| Document | Purpose |
+|----------|---------|
+| [architecture.md](architecture.md) | Public architecture overview |
+| [five-laws.md](five-laws.md) | Project constitution |
+| [decisions.md](decisions.md) | Lightweight decision log |
+| [adr/](adr/) | Architecture Decision Records |
 
 ## Structure
 
-- `adr/` — Architecture Decision Records. Every significant architectural decision gets a numbered ADR (context → decision → consequences). Immutable once accepted; superseded, never edited.
-- `research/` — Research journal: prior-art findings, competitive analysis, design explorations.
-- `decisions.md` — Lightweight running decision log (quick entries; promoted to ADRs when significant).
+- **`adr/`** — Architecture Decision Records. Each ADR captures context,
+  decision, and consequences. Accepted ADRs are immutable; supersede, do not edit.
+- **`research/`** — Method notes on KAV itself (domain vocabulary, contract
+  validation exercises). Not host-project findings.
+- **`decisions.md`** — Running log of decisions; significant entries are
+  promoted to ADRs.
 
-## Rules of the process
+## Process rules
 
-1. **Every step forward is documented.** No implementation without a decision or journal entry preceding it.
-2. **Contracts before code.** Data contracts (ProjectManifest, SearchSpace, ExperimentSpec, ExperimentResult, ResearchFinding) are agreed in docs before implementation.
-3. **The evaluator is sovereign.** Any design that lets KAV touch its own evaluator is rejected by default.
+1. **Document before implementing.** No significant code without a preceding
+   decision or ADR entry.
+2. **Contracts before code.** The five JSON Schemas in `contracts/` are agreed
+   in docs before SDK changes land.
+3. **The evaluator is sovereign.** Designs that let KAV touch its own evaluator
+   are rejected by default.
 
-## Index
+## ADR index
 
-### ADRs
-_(none yet — first ADRs to be drafted during architecture alignment)_
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-001](adr/ADR-001-langgraph-vs-deepagents.md) | Control plane: LangGraph vs Deep Agents harness | Accepted |
+| [ADR-002](adr/ADR-002-project-local-memory-and-single-hypothesis.md) | Project-local memory; one hypothesis per experiment | Accepted |
+| [ADR-003](adr/ADR-003-schema-first-adapter-contract.md) | Schema-first adapter contract | Accepted |
+| [ADR-004](adr/ADR-004-research-loop-policies.md) | Research loop policies | Accepted |
 
-### Research
-- [History Archive Findings](research/history-archive-findings.md) — relevant prior work from Claude history (Numerai guides, AutoML, stats foundations)
+## Research notes
+
+| Note | Description |
+|------|-------------|
+| [five-nouns.md](research/five-nouns.md) | Domain vocabulary (Project, Hypothesis, Experiment, Evidence, Finding) |
+| [numerai-paper-exercise.md](research/numerai-paper-exercise.md) | Contract stress test against a synthetic domain example |

@@ -1,8 +1,7 @@
 # The Five Laws of KAV
 
 > The constitution. Every design decision, contract, and line of code must be
-> checkable against these. Any developer or agent working on KAV validates their
-> work here first. Laws are amended only by explicit owner decision (new ADR).
+> checkable against these. Laws are amended only by explicit ADR.
 
 ## Law 1 — The Evaluator Is Sovereign
 No KAV component may create, alter, or reinterpret evidence. Measurement belongs

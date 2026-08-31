@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: "KAV: Knowledge through Adaptive Validation"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Momeni
+    given-names: Kaveh
+repository-code: "https://github.com/kvmmn/kav"
+url: "https://github.com/kvmmn/kav"
+license: MIT
+version: 0.1.0
+date-released: 2026-08-25
+keywords:
+  - research-orchestration
+  - autonomous-experimentation
+  - evidence-gated-learning
+  - schema-first-adapters
+abstract: >-
+  KAV is a domain-agnostic research orchestrator that attaches to host systems
+  via a minimal JSON Schema contract, runs a hypothesis-to-evidence loop with
+  project-local memory, and enforces a five-law constitution including sovereign
+  host evaluation and lineage-traced findings.

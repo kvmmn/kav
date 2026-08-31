@@ -8,7 +8,7 @@
 ## 1. Project
 
 A **host system** that has a question worth answering, a bounded space of things that may be tried, and a trusted way to measure whether an answer is good.
-*(Examples: a Numerai model, a RAG pipeline, a pricing engine.)*
+*(Examples: a forecasting model, a RAG pipeline, a pricing engine.)*
 
 ## 2. Hypothesis
 
