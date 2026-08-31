@@ -23,3 +23,4 @@ _(none yet — first ADRs to be drafted during architecture alignment)_
 
 ### Research
 - [History Archive Findings](research/history-archive-findings.md) — relevant prior work from Claude history (Numerai guides, AutoML, stats foundations)
+- [Short-Path Web Search Lineage](research/short-path-lineage.md) — why v0.1 contracts cannot store search hits as `ResearchFinding`; operator shape until a future ADR
