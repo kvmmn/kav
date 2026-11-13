@@ -1,8 +1,8 @@
 """End-to-end walkthrough of one research cycle — no LLM required.
 
-Simulates the loop deterministically: tools + memory only. This proves the
-plumbing (observe → hypothesize → spec → result → finding → promote) before
-we let an LLM drive it.
+Simulates the loop deterministically: tools + memory + HostRunner. This proves
+the plumbing (observe → hypothesize → spec → host drain → finding → promote)
+before we let an LLM drive it.
 """
 import sys, tempfile
 from pathlib import Path
@@ -10,10 +10,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk"))
 
 from kav_sdk import (
-    Budget, Change, Constraints, Domain, EvaluatorDecl, ExperimentResult,
-    ExperimentSpec, Evidence, FindingKind, Objective, Parameter,
-    ProjectManifest, ResearchFinding, SearchSpace,
+    Budget, Change, Constraints, Domain, EvaluatorDecl, ExperimentSpec,
+    FindingKind, Objective, Parameter, ProjectManifest, ResearchFinding,
+    SearchSpace,
 )
+from kav_sdk.adapter import HostRunner, SimulatedHost
 from kav_sdk.memory import ProjectMemory
 from kav_sdk.tools import make_kav_tools
 
@@ -21,19 +22,23 @@ root = Path(tempfile.mkdtemp(prefix="kav_walkthrough_"))
 mem = ProjectMemory(root, "numerai-demo")
 tools = {t.__name__: t for t in make_kav_tools(mem)}
 
-# --- setup: host registers manifest + space (adapter's job, not the agent's)
-mem.save_manifest(ProjectManifest(
-    project_id="numerai-demo", name="Numerai Demo",
-    objective=Objective(metric="correlation", direction="maximize", baseline=0.021),
-    constraints=Constraints(max_budget_per_experiment=Budget(max_compute_hours=2)),
-    evaluator=EvaluatorDecl(owned_by="host"),
-))
-mem.save_search_space(SearchSpace(
-    project_id="numerai-demo",
-    parameters=[Parameter(name="lr", type="number",
-                          domain=Domain(kind="range", min=0.001, max=0.1))],
-    defaults={"lr": 0.01},
-))
+host = SimulatedHost(
+    ProjectManifest(
+        project_id="numerai-demo", name="Numerai Demo",
+        objective=Objective(metric="correlation", direction="maximize", baseline=0.021),
+        constraints=Constraints(max_budget_per_experiment=Budget(max_compute_hours=2)),
+        evaluator=EvaluatorDecl(owned_by="host"),
+    ),
+    SearchSpace(
+        project_id="numerai-demo",
+        parameters=[Parameter(name="lr", type="number",
+                              domain=Domain(kind="range", min=0.001, max=0.1))],
+        defaults={"lr": 0.01},
+    ),
+    evaluate=lambda params: 0.024,
+)
+runner = HostRunner(mem, host)
+runner.attach()
 mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
 
 print("1. OBSERVE")
@@ -51,12 +56,8 @@ print("3. VALIDATE:", tools["check_spec"](spec.model_dump_json()))
 
 print("4. ISSUE:", tools["issue_spec"](spec.model_dump_json()))
 
-print("5. HOST EXECUTES (simulated) -> result arrives")
-result = ExperimentResult(
-    experiment_id="exp-walk001", status="completed",
-    evidence=Evidence(metric_value=0.024),
-)
-print("   INGEST:", tools["ingest_result"](result.model_dump_json()))
+print("5. HOST EXECUTES via HostRunner.drain_pending()")
+print("   DRAINED:", runner.drain_pending(), "pending spec(s)")
 
 print("6. DISTILL finding")
 finding = ResearchFinding(

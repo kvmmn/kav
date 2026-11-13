@@ -29,3 +29,4 @@ ADRs in [adr/](adr/).
 | D-022 | 2026-08-25 | Control plane skeleton: whitelisted tools + agent harness; deterministic walkthrough passing | Accepted |
 | D-023 | 2026-08-25 | Repository scaffolding: README, `.gitignore`, ADR numbering fixed; 21/21 tests green | Accepted |
 | D-024 | 2026-08-25 | First live LLM cycle: Laws held through spec self-correction; multi-turn host-runner loop added | Accepted |
+| D-025 | 2026-11-13 | Host Adapter v0.1: Python in-process projection of the four operations (`HostAdapter` + `SimulatedHost` + `HostRunner`); `pending_specs()` FIFO for `result IS NULL`; live and walkthrough cycles use the runner instead of wrapping `issue_spec` | Accepted |

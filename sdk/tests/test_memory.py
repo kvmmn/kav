@@ -83,6 +83,17 @@ def test_result_requires_known_experiment(mem):
         mem.save_result(result("exp-unknown"))
 
 
+def test_pending_specs_fifo_until_result(mem):
+    assert mem.pending_specs() == []
+    mem.save_spec(spec("exp-pend01"))
+    mem.save_spec(spec("exp-pend02"))
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-pend01", "exp-pend02"]
+    mem.save_result(result("exp-pend01"))
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-pend02"]
+    mem.save_result(result("exp-pend02", value=0.03))
+    assert mem.pending_specs() == []
+
+
 # ---- Law 3: findings immutable
 def test_finding_immutable(mem):
     mem.save_finding(finding())

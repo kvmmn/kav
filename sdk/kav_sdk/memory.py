@@ -139,6 +139,15 @@ class ProjectMemory:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def pending_specs(self) -> list[ExperimentSpec]:
+        """Issued specs whose result is still NULL, oldest first (FIFO)."""
+        rows = self.conn.execute(
+            "SELECT spec FROM experiments WHERE project_id=? AND result IS NULL "
+            "ORDER BY seq ASC",
+            (self.project_id,),
+        ).fetchall()
+        return [ExperimentSpec.model_validate_json(r["spec"]) for r in rows]
+
     def consecutive_failures(self) -> int:
         """Circuit-breaker input (ADR-004): length of the current failure streak."""
         rows = self.conn.execute(

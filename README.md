@@ -9,8 +9,10 @@ policy.
 > **Think. Test. Learn.**
 
 **Author:** [Kaveh Momeni](https://github.com/kvmmn)  
-**Status:** v0.1 foundation — contracts, SDK, memory layer, and deterministic
-research cycle are implemented; live LLM-driven cycles are experimental.
+**Status:** v0.1 — foundation + live cycle + Host Adapter v0.1 (in-process
+`HostAdapter` / `SimulatedHost` / `HostRunner`). Contracts, SDK, memory, and
+the deterministic research cycle are implemented; live LLM-driven cycles remain
+experimental.
 
 ---
 
@@ -88,7 +90,7 @@ schema-first, language bindings second).
 | Path | Description |
 |------|-------------|
 | [contracts/](contracts/) | Canonical JSON Schemas (v0.1) |
-| [sdk/](sdk/) | `kav-sdk` — Pydantic models, project-local SQLite memory, whitelisted tools |
+| [sdk/](sdk/) | `kav-sdk` — Pydantic models, project-local SQLite memory, Host Adapter v0.1, whitelisted tools |
 | [examples/](examples/) | Deterministic walkthrough and contract stress tests |
 | [docs/](docs/) | Architecture, ADRs, decision log, method notes |
 | [docs/adr/](docs/adr/) | Architecture Decision Records (immutable once accepted) |
@@ -111,8 +113,8 @@ python3 examples/walkthrough_one_cycle.py
 ```
 
 The walkthrough simulates the full loop — observe → hypothesize → validate →
-issue → ingest → distill → promote — using in-memory tools and a temporary
-SQLite store.
+issue → HostRunner drain → distill → promote — using in-memory tools, a
+SimulatedHost, and a temporary SQLite store.
 
 Optional: `examples/live_one_cycle.py` runs an LLM-driven cycle when
 `OPENROUTER_API_KEY` is set. This path is experimental and not required to
