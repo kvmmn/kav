@@ -10,9 +10,9 @@ policy.
 
 **Author:** [Kaveh Momeni](https://github.com/kvmmn)  
 **Status:** v0.1 — foundation + live cycle + Host Adapter v0.1 (in-process
-`HostAdapter` / `SimulatedHost` / `HostRunner`). Contracts, SDK, memory, and
-the deterministic research cycle are implemented; live LLM-driven cycles remain
-experimental.
+`HostAdapter` / `SimulatedHost` / `HostRunner`) + HTTP/OpenAPI projection of
+the four adapter operations. Contracts, SDK, memory, and the deterministic
+research cycle are implemented; live LLM-driven cycles remain experimental.
 
 ---
 
@@ -89,8 +89,8 @@ schema-first, language bindings second).
 
 | Path | Description |
 |------|-------------|
-| [contracts/](contracts/) | Canonical JSON Schemas (v0.1) |
-| [sdk/](sdk/) | `kav-sdk` — Pydantic models, project-local SQLite memory, Host Adapter v0.1, whitelisted tools |
+| [contracts/](contracts/) | Canonical JSON Schemas (v0.1) plus OpenAPI 3.0 for the HTTP adapter |
+| [sdk/](sdk/) | `kav-sdk` — Pydantic models, project-local SQLite memory, Host Adapter v0.1, HTTP/OpenAPI projection, whitelisted tools |
 | [examples/](examples/) | Deterministic walkthrough and contract stress tests |
 | [docs/](docs/) | Architecture, ADRs, decision log, method notes |
 | [docs/adr/](docs/adr/) | Architecture Decision Records (immutable once accepted) |

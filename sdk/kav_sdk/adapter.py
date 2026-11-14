@@ -2,7 +2,8 @@
 
 The JSON Schemas in contracts/ remain canonical (ADR-003, D-008, D-009).
 This module is the Python library transport: attach a host, drain issued
-specs, ingest host-reported results. HTTP/OpenAPI is a later projection.
+specs, ingest host-reported results. HTTP/OpenAPI lives in `kav_sdk.http`
+(D-026).
 """
 from __future__ import annotations
 

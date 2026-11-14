@@ -122,8 +122,10 @@ The adapter surface is fixed at four host-facing operations (decision D-009):
 4. **Report result** — host returns `ExperimentResult` (including failures)
 
 Schemas in [../contracts/](../contracts/) are canonical; SDK models are
-projections (ADR-003). Transports (HTTP, gRPC, in-process library) are
-implementation choices left to adapters.
+projections (ADR-003). v0.1 ships two transports of the same four operations:
+in-process (`kav_sdk.adapter`) and HTTP/OpenAPI (`kav_sdk.http`,
+[adapter-http.openapi.json](../contracts/adapter-http.openapi.json)). gRPC
+remains a later choice.
 
 ### Attachment principles (Law 5)
 
@@ -155,6 +157,7 @@ requires a new ADR — never an implicit shortcut.
 | Contract models | `sdk/kav_sdk/models.py` | Pydantic; enforces Laws 1–3 in validation |
 | Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO |
 | Host adapter | `sdk/kav_sdk/adapter.py` | In-process projection of the four operations; `SimulatedHost` + `HostRunner` (D-025) |
+| HTTP adapter | `sdk/kav_sdk/http.py` | OpenAPI 3.0 projection of the same four operations; stdlib server + `HttpHostAdapter` (D-026) |
 | Whitelisted tools | `sdk/kav_sdk/tools.py` | Six deterministic tools wrapping SDK + memory |
 | Agent harness | `sdk/kav_sdk/agent.py` | Deep Agents on LangGraph (ADR-001); raw-graph escape hatch preserved |
 

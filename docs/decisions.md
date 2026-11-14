@@ -30,3 +30,4 @@ ADRs in [adr/](adr/).
 | D-023 | 2026-08-25 | Repository scaffolding: README, `.gitignore`, ADR numbering fixed; 21/21 tests green | Accepted |
 | D-024 | 2026-08-25 | First live LLM cycle: Laws held through spec self-correction; multi-turn host-runner loop added | Accepted |
 | D-025 | 2026-11-13 | Host Adapter v0.1: Python in-process projection of the four operations (`HostAdapter` + `SimulatedHost` + `HostRunner`); `pending_specs()` FIFO for `result IS NULL`; live and walkthrough cycles use the runner instead of wrapping `issue_spec` | Accepted |
+| D-026 | 2026-11-14 | HTTP/OpenAPI v0.1 projection of the four adapter operations: stdlib server wrapping any `HostAdapter`, `HttpHostAdapter` client, OpenAPI 3.0 in `contracts/adapter-http.openapi.json`. Payload JSON Schemas remain canonical (ADR-003). No extra runtime dependency. | Accepted |
