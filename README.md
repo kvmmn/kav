@@ -11,8 +11,10 @@ policy.
 **Author:** [Kaveh Momeni](https://github.com/kvmmn)  
 **Status:** v0.1 — foundation + live cycle + Host Adapter v0.1 (in-process
 `HostAdapter` / `SimulatedHost` / `HostRunner`) + HTTP/OpenAPI projection of
-the four adapter operations. Contracts, SDK, memory, and the deterministic
-research cycle are implemented; live LLM-driven cycles remain experimental.
+the four adapter operations + circuit-breaker **halt** (three similar consecutive
+failures stop the strategy and alert a human). Contracts, SDK, memory, and the
+deterministic research cycle are implemented; live LLM-driven cycles remain
+experimental. Promotion stays manual (ADR-004).
 
 ---
 

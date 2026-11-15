@@ -137,3 +137,69 @@ def test_consecutive_failures_streak(mem):
     mem.save_spec(spec("exp-ok0001"))
     mem.save_result(result("exp-ok0001", value=0.03))
     assert mem.consecutive_failures() == 0
+
+
+def _failed(eid):
+    return ExperimentResult(
+        experiment_id=eid, status="failed",
+        error={"code": "crash", "message": "boom"},
+    )
+
+
+def spec_trees(eid):
+    return ExperimentSpec(
+        experiment_id=eid, project_id="numerai-demo", hypothesis_id="hyp-bbb222",
+        changes=[Change(parameter="n_trees", value=200)],
+        reproducibility={"seed": 42},
+    )
+
+
+def test_three_similar_failures_halt_and_alert(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    ids = ["exp-f02001", "exp-f02002", "exp-f02003"]
+    for eid in ids:
+        mem.save_spec(spec(eid))
+        out = tools["ingest_result"](_failed(eid).model_dump_json())
+    assert out.startswith("HALTED")
+    assert mem.is_halted()
+    assert mem.consecutive_similar_failures() == 3
+    alerts = mem.active_findings(kinds=["operational"])
+    assert len(alerts) == 1
+    assert alerts[0].experiment_id == "exp-f02003"
+    assert "circuit breaker" in alerts[0].statement.lower()
+    assert "circuit-breaker" in alerts[0].tags
+
+
+def test_dissimilar_failures_do_not_halt(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-f03001"))
+    mem.save_spec(spec("exp-f03002"))
+    mem.save_spec(spec_trees("exp-f03003"))
+    tools["ingest_result"](_failed("exp-f03001").model_dump_json())
+    tools["ingest_result"](_failed("exp-f03002").model_dump_json())
+    out = tools["ingest_result"](_failed("exp-f03003").model_dump_json())
+    assert out.startswith("RECORDED")
+    assert not mem.is_halted()
+    assert mem.consecutive_failures() == 3
+    assert mem.consecutive_similar_failures() == 1
+
+
+def test_issue_spec_refused_until_resume(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    for eid in ["exp-f04001", "exp-f04002", "exp-f04003"]:
+        mem.save_spec(spec(eid))
+        tools["ingest_result"](_failed(eid).model_dump_json())
+    blocked = tools["issue_spec"](spec("exp-f04004").model_dump_json())
+    assert blocked.startswith("HALTED")
+    assert tools["resume_strategy"]() == "RESUMED"
+    assert not mem.is_halted()
+    issued = tools["issue_spec"](spec("exp-f04004").model_dump_json())
+    assert issued.startswith("ISSUED")

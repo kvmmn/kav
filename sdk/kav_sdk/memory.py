@@ -54,7 +54,19 @@ CREATE TABLE IF NOT EXISTS champion (
     experiment_id TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS strategy_halt (
+    project_id TEXT PRIMARY KEY,
+    halted INTEGER NOT NULL DEFAULT 0,
+    signature TEXT,
+    experiment_id TEXT,
+    finding_id TEXT,
+    reason TEXT,
+    halted_at TEXT
+);
 """
+
+_FAIL_STATUSES = frozenset({"failed", "timeout", "rejected"})
+CIRCUIT_BREAKER_THRESHOLD = 3
 
 
 class ProjectMemory:
@@ -149,19 +161,115 @@ class ProjectMemory:
         return [ExperimentSpec.model_validate_json(r["spec"]) for r in rows]
 
     def consecutive_failures(self) -> int:
-        """Circuit-breaker input (ADR-004): length of the current failure streak."""
+        """Length of the current failure streak (any failed/timeout/rejected)."""
         rows = self.conn.execute(
             "SELECT status FROM experiments WHERE project_id=? "
-            "ORDER BY seq DESC LIMIT 10",
+            "AND status IS NOT NULL ORDER BY seq DESC LIMIT 10",
             (self.project_id,),
         ).fetchall()
         n = 0
         for r in rows:
-            if r["status"] in ("failed", "timeout", "rejected"):
+            if r["status"] in _FAIL_STATUSES:
                 n += 1
             else:
                 break
         return n
+
+    @staticmethod
+    def spec_signature(spec: ExperimentSpec) -> str:
+        """Structural identity: sorted unique changed parameter names (ADR-004 Q3)."""
+        return ",".join(sorted({c.parameter for c in spec.changes}))
+
+    def consecutive_similar_failures(self) -> int:
+        """Failure streak sharing the most recent failure's spec signature."""
+        rows = self.conn.execute(
+            "SELECT status, spec FROM experiments WHERE project_id=? "
+            "AND status IS NOT NULL ORDER BY seq DESC LIMIT 20",
+            (self.project_id,),
+        ).fetchall()
+        if not rows or rows[0]["status"] not in _FAIL_STATUSES:
+            return 0
+        signature = self.spec_signature(ExperimentSpec.model_validate_json(rows[0]["spec"]))
+        n = 0
+        for r in rows:
+            if r["status"] not in _FAIL_STATUSES:
+                break
+            if self.spec_signature(ExperimentSpec.model_validate_json(r["spec"])) != signature:
+                break
+            n += 1
+        return n
+
+    def is_halted(self) -> bool:
+        row = self.conn.execute(
+            "SELECT halted FROM strategy_halt WHERE project_id=?", (self.project_id,)
+        ).fetchone()
+        return bool(row and row["halted"])
+
+    def halt_state(self) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM strategy_halt WHERE project_id=?", (self.project_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def evaluate_circuit_breaker(self, result: ExperimentResult) -> bool:
+        """Halt + operational alert when 3 similar consecutive failures land (D-027).
+
+        Returns True when the strategy is (now, or already) halted.
+        """
+        if self.is_halted():
+            return True
+        if result.status.value not in _FAIL_STATUSES:
+            return False
+        if self.consecutive_similar_failures() < CIRCUIT_BREAKER_THRESHOLD:
+            return False
+        row = self.get_experiment(result.experiment_id)
+        if row is None:
+            raise KeyError(f"unknown experiment: {result.experiment_id}")
+        spec = ExperimentSpec.model_validate_json(row["spec"])
+        signature = self.spec_signature(spec)
+        suffix = result.experiment_id.removeprefix("exp-")
+        finding = ResearchFinding(
+            finding_id=f"fnd-halt-{suffix}"[:68],
+            project_id=self.project_id,
+            experiment_id=result.experiment_id,
+            hypothesis_id=spec.hypothesis_id,
+            kind="operational",
+            statement=(
+                f"Circuit breaker halted the current strategy after "
+                f"{CIRCUIT_BREAKER_THRESHOLD} consecutive similar failures "
+                f"on parameters [{signature or 'none'}]."
+            ),
+            confidence=0.9,
+            tags=list(dict.fromkeys(
+                ["circuit-breaker", "halt", *[p for p in signature.split(",") if p][:8]]
+            )),
+            conditions={"config_snapshot": {"signature": signature, "status": result.status.value}},
+        )
+        self.save_finding(finding)
+        self.conn.execute(
+            "INSERT OR REPLACE INTO strategy_halt "
+            "(project_id, halted, signature, experiment_id, finding_id, reason, halted_at) "
+            "VALUES (?, 1, ?, ?, ?, ?, datetime('now'))",
+            (
+                self.project_id,
+                signature,
+                result.experiment_id,
+                finding.finding_id,
+                finding.statement,
+            ),
+        )
+        self.conn.commit()
+        return True
+
+    def clear_halt(self) -> None:
+        """Human resume of a halted strategy (does not delete the alert finding)."""
+        if not self.is_halted():
+            return
+        self.conn.execute(
+            "UPDATE strategy_halt SET halted=0 WHERE project_id=?",
+            (self.project_id,),
+        )
+        self.conn.commit()
 
     # --------------------------------------------------------------- findings
     def save_finding(self, f: ResearchFinding) -> None:

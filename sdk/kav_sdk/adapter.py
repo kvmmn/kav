@@ -104,9 +104,15 @@ class HostRunner:
         self.memory.save_search_space(self.adapter.search_space())
 
     def drain_pending(self) -> int:
-        """Run pending specs FIFO; ingest each host-reported result. Returns count."""
+        """Run pending specs FIFO; ingest each host-reported result. Returns count.
+
+        Stops without running further specs once the circuit breaker has halted
+        the strategy (D-027). Already-ingested results stay recorded.
+        """
         n = 0
         for spec in self.memory.pending_specs():
+            if self.memory.is_halted():
+                break
             raw = self.adapter.run_experiment(spec)
             reported = self.adapter.report_result(raw)
             self._ingest(reported.model_dump_json())

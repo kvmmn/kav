@@ -142,7 +142,9 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
 
 - Findings are **immutable**; supersession uses `superseded_by`
 - A **champion** table tracks the current best config and metric
-- **Consecutive failure** tracking feeds a circuit breaker (ADR-004)
+- **Consecutive failure** tracking feeds a circuit breaker (ADR-004). Three
+  consecutive failures of structurally similar specs halt the strategy and
+  write an `operational` finding as the human alert (D-027). Resume is human-gated.
 - No cross-project reads or writes in v0.1
 
 The data model is tagged for a future optional shared-prior layer, but sharing
@@ -158,7 +160,7 @@ requires a new ADR — never an implicit shortcut.
 | Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO |
 | Host adapter | `sdk/kav_sdk/adapter.py` | In-process projection of the four operations; `SimulatedHost` + `HostRunner` (D-025) |
 | HTTP adapter | `sdk/kav_sdk/http.py` | OpenAPI 3.0 projection of the same four operations; stdlib server + `HttpHostAdapter` (D-026) |
-| Whitelisted tools | `sdk/kav_sdk/tools.py` | Six deterministic tools wrapping SDK + memory |
+| Whitelisted tools | `sdk/kav_sdk/tools.py` | Seven deterministic tools wrapping SDK + memory (`resume_strategy` is human-gated) |
 | Agent harness | `sdk/kav_sdk/agent.py` | Deep Agents on LangGraph (ADR-001); raw-graph escape hatch preserved |
 
 Tools are restricted to contract-shaped operations. Shell access, host filesystem

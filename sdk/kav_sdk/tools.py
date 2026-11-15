@@ -27,6 +27,8 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
             "recent_experiments": memory.recent_experiments(limit=10),
             "active_findings": [f.model_dump(mode="json") for f in memory.active_findings(limit=10)],
             "failure_streak": memory.consecutive_failures(),
+            "similar_failure_streak": memory.consecutive_similar_failures(),
+            "circuit_breaker": memory.halt_state(),
         })
 
     def check_spec(spec_json: str) -> str:
@@ -44,6 +46,8 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
 
     def issue_spec(spec_json: str) -> str:
         """DESIGN→AWAIT_EXECUTION: persist a validated spec; host picks it up."""
+        if memory.is_halted():
+            return "HALTED: circuit breaker — human must resume_strategy before issuing"
         verdict = check_spec(spec_json)
         if verdict != "VALID":
             return verdict
@@ -55,7 +59,19 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         """INGEST node: record the host's honest report. Values stored as-is (Law 1)."""
         result = ExperimentResult.model_validate_json(result_json)
         memory.save_result(result)
+        if memory.evaluate_circuit_breaker(result):
+            return (
+                f"HALTED {result.experiment_id} status={result.status.value} "
+                "circuit-breaker alert recorded"
+            )
         return f"RECORDED {result.experiment_id} status={result.status.value}"
+
+    def resume_strategy() -> str:
+        """Human-gated resume after a circuit-breaker halt (ADR-004 Q3)."""
+        if not memory.is_halted():
+            return "NOT_HALTED"
+        memory.clear_halt()
+        return "RESUMED"
 
     def record_finding(finding_json: str) -> str:
         """DISTILL node: write an immutable finding with lineage."""
@@ -68,4 +84,4 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         memory.set_champion(config, metric_value, experiment_id)
         return f"PROMOTED (champion metric={metric_value})"
 
-    return [observe, check_spec, issue_spec, ingest_result, record_finding, promote]
+    return [observe, check_spec, issue_spec, ingest_result, record_finding, promote, resume_strategy]

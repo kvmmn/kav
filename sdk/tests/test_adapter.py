@@ -87,6 +87,21 @@ def test_drain_pending_fifo_and_ingest(mem):
     assert runner.drain_pending() == 0
 
 
+def test_drain_pending_stops_after_circuit_breaker_halt(mem):
+    def boom(_params):
+        raise RuntimeError("evaluator crashed")
+
+    runner = HostRunner(mem, SimulatedHost(manifest(), space(), boom))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    for i, eid in enumerate(["exp-ada101", "exp-ada102", "exp-ada103", "exp-ada104"]):
+        tools["issue_spec"](spec(eid).model_dump_json())
+    assert runner.drain_pending() == 3
+    assert mem.is_halted()
+    assert mem.get_experiment("exp-ada104")["result"] is None
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada104"]
+
+
 def test_failed_host_run_is_ingested(mem):
     def boom(_params):
         raise RuntimeError("evaluator crashed")
