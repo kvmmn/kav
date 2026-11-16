@@ -34,11 +34,11 @@ def space():
     )
 
 
-def spec(eid="exp-aaa111"):
+def spec(eid="exp-aaa111", lr=0.02, seed=42):
     return ExperimentSpec(
         experiment_id=eid, project_id="numerai-demo", hypothesis_id="hyp-bbb222",
-        changes=[Change(parameter="lr", value=0.02)],
-        reproducibility={"seed": 42},
+        changes=[Change(parameter="lr", value=lr)],
+        reproducibility={"seed": seed},
     )
 
 
@@ -203,3 +203,203 @@ def test_issue_spec_refused_until_resume(mem):
     assert not mem.is_halted()
     issued = tools["issue_spec"](spec("exp-f04004").model_dump_json())
     assert issued.startswith("ISSUED")
+
+
+# ---- auto_guarded promotion (D-028)
+def _confirmed(fid, eid, statement="Raising lr improved correlation."):
+    return ResearchFinding(
+        finding_id=fid, project_id="numerai-demo", experiment_id=eid,
+        hypothesis_id="hyp-bbb222", kind="confirmed",
+        statement=statement, confidence=0.7, tags=["lr"],
+    )
+
+
+def _harmful(fid, eid):
+    return ResearchFinding(
+        finding_id=fid, project_id="numerai-demo", experiment_id=eid,
+        hypothesis_id="hyp-bbb222", kind="harmful",
+        statement="This config used a forbidden validation-set peek.",
+        confidence=0.8, tags=["forbidden"],
+    )
+
+
+def test_manual_default_does_not_auto_promote(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-p01001", seed=1))
+    mem.save_result(result("exp-p01001", value=0.030))
+    mem.save_spec(spec("exp-p01002", seed=2))
+    mem.save_result(result("exp-p01002", value=0.031))
+    tools["record_finding"](_confirmed("fnd-p01001", "exp-p01001").model_dump_json())
+    out = tools["record_finding"](_confirmed("fnd-p01002", "exp-p01002").model_dump_json())
+    assert out.startswith("RECORDED")
+    assert "PROMOTED" not in out
+    assert mem.get_champion()["metric_value"] == 0.021
+
+
+def test_auto_guarded_promotes_on_two_independent_confirmations(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-p02001", seed=11))
+    mem.save_result(result("exp-p02001", value=0.028))
+    first = tools["record_finding"](_confirmed("fnd-p02001", "exp-p02001").model_dump_json())
+    assert first == "RECORDED fnd-p02001"
+    assert mem.get_champion()["metric_value"] == 0.021
+    mem.save_spec(spec("exp-p02002", seed=12))
+    mem.save_result(result("exp-p02002", value=0.030))
+    second = tools["record_finding"](_confirmed("fnd-p02002", "exp-p02002").model_dump_json())
+    assert "PROMOTED" in second
+    champ = mem.get_champion()
+    assert champ["metric_value"] == 0.030
+    assert champ["experiment_id"] == "exp-p02002"
+    notices = mem.active_findings(kinds=["operational"])
+    assert len(notices) == 1
+    assert "auto-guarded" in notices[0].tags
+    assert "auto-guarded promotion" in notices[0].statement.lower()
+    policy = mem.get_promotion_policy()
+    assert policy["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_auto_guarded_same_seed_is_not_independent(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-p03001", seed=7))
+    mem.save_result(result("exp-p03001", value=0.028))
+    mem.save_spec(spec("exp-p03002", seed=7))
+    mem.save_result(result("exp-p03002", value=0.029))
+    tools["record_finding"](_confirmed("fnd-p03001", "exp-p03001").model_dump_json())
+    out = tools["record_finding"](_confirmed("fnd-p03002", "exp-p03002").model_dump_json())
+    assert "PROMOTED" not in out
+    assert mem.get_champion()["metric_value"] == 0.021
+
+
+def test_auto_guarded_harmful_finding_blocks(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-p04001", seed=21))
+    mem.save_result(result("exp-p04001", value=0.028))
+    mem.save_spec(spec("exp-p04002", seed=22))
+    mem.save_result(result("exp-p04002", value=0.030))
+    tools["record_finding"](_confirmed("fnd-p04001", "exp-p04001").model_dump_json())
+    tools["record_finding"](_harmful("fnd-p0400h", "exp-p04002").model_dump_json())
+    out = tools["record_finding"](_confirmed("fnd-p04002", "exp-p04002").model_dump_json())
+    assert "PROMOTED" not in out
+    assert mem.get_champion()["metric_value"] == 0.021
+
+
+def test_auto_guarded_below_threshold_does_not_promote(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED, min_delta=0.02)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-p05001", seed=31))
+    mem.save_result(result("exp-p05001", value=0.025))
+    mem.save_spec(spec("exp-p05002", seed=32))
+    mem.save_result(result("exp-p05002", value=0.026))
+    tools["record_finding"](_confirmed("fnd-p05001", "exp-p05001").model_dump_json())
+    out = tools["record_finding"](_confirmed("fnd-p05002", "exp-p05002").model_dump_json())
+    assert "PROMOTED" not in out
+    assert mem.get_champion()["metric_value"] == 0.021
+
+
+def test_auto_guarded_minimize_direction(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    m = ProjectManifest(
+        project_id="numerai-demo", name="Demo",
+        objective=Objective(metric="loss", direction="minimize"),
+        constraints=Constraints(max_budget_per_experiment=Budget(max_compute_hours=2)),
+        evaluator=EvaluatorDecl(owned_by="host"),
+    )
+    mem.save_manifest(m)
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.40, "exp-baseline")
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-p06001", seed=41))
+    mem.save_result(result("exp-p06001", value=0.35))
+    mem.save_spec(spec("exp-p06002", seed=42))
+    mem.save_result(result("exp-p06002", value=0.33))
+    tools["record_finding"](_confirmed("fnd-p06001", "exp-p06001").model_dump_json())
+    out = tools["record_finding"](_confirmed("fnd-p06002", "exp-p06002").model_dump_json())
+    assert "PROMOTED" in out
+    assert mem.get_champion()["metric_value"] == 0.33
+
+
+def test_auto_guarded_halt_blocks_promotion(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    for eid in ["exp-p07001", "exp-p07002", "exp-p07003"]:
+        mem.save_spec(spec(eid))
+        tools["ingest_result"](_failed(eid).model_dump_json())
+    assert mem.is_halted()
+    mem.save_spec(spec("exp-p07004", seed=51))
+    mem.save_result(result("exp-p07004", value=0.030))
+    mem.save_spec(spec("exp-p07005", seed=52))
+    mem.save_result(result("exp-p07005", value=0.031))
+    tools["record_finding"](_confirmed("fnd-p07004", "exp-p07004").model_dump_json())
+    out = tools["record_finding"](_confirmed("fnd-p07005", "exp-p07005").model_dump_json())
+    assert "PROMOTED" not in out
+    assert mem.get_champion()["metric_value"] == 0.021
+
+
+def test_human_promote_still_works_in_auto_guarded(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    out = tools["promote"]({"lr": 0.02}, 0.024, "exp-human01")
+    assert out.startswith("PROMOTED")
+    assert mem.get_champion()["metric_value"] == 0.024
+
+
+def test_observe_includes_promotion_policy(mem):
+    from kav_sdk.memory import PROMOTION_AUTO_GUARDED
+    from kav_sdk.tools import make_kav_tools
+    import json
+
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    state = json.loads(tools["observe"]())
+    assert state["promotion_policy"]["mode"] == "manual"
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED, min_delta=0.01, confirmations=3)
+    state = json.loads(tools["observe"]())
+    assert state["promotion_policy"] == {
+        "mode": PROMOTION_AUTO_GUARDED,
+        "min_delta": 0.01,
+        "confirmations": 3,
+    }

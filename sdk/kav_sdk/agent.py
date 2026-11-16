@@ -36,8 +36,11 @@ YOUR LOOP:
   reproducibility object requires a "seed" (integer).
 - After results arrive (ingest_result by the runner), analyze and record_finding()
   with kind confirmed/refuted/harmful/inconclusive/operational and full lineage.
-- If evidence beats the champion, propose promotion — promotion happens only via
-  the promote tool after human approval.
+- If evidence beats the champion: in manual mode (default) propose promotion
+  via the promote tool after human approval. In auto_guarded mode, a confirmed
+  finding may auto-promote when N independent confirmations beat the champion
+  by min_delta with no harmful findings; an operational finding is the human
+  notification. The promote tool remains a human override.
 
 Be economical: change as little as possible from defaults per experiment.
 """

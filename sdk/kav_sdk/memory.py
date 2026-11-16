@@ -63,10 +63,21 @@ CREATE TABLE IF NOT EXISTS strategy_halt (
     reason TEXT,
     halted_at TEXT
 );
+CREATE TABLE IF NOT EXISTS promotion_policy (
+    project_id TEXT PRIMARY KEY,
+    mode TEXT NOT NULL DEFAULT 'manual',
+    min_delta REAL NOT NULL DEFAULT 0,
+    confirmations INTEGER NOT NULL DEFAULT 2
+);
 """
 
 _FAIL_STATUSES = frozenset({"failed", "timeout", "rejected"})
 CIRCUIT_BREAKER_THRESHOLD = 3
+PROMOTION_MANUAL = "manual"
+PROMOTION_AUTO_GUARDED = "auto_guarded"
+_PROMOTION_MODES = frozenset({PROMOTION_MANUAL, PROMOTION_AUTO_GUARDED})
+DEFAULT_MIN_DELTA = 0.0
+DEFAULT_CONFIRMATIONS = 2
 
 
 class ProjectMemory:
@@ -324,6 +335,174 @@ class ProjectMemory:
             (self.project_id, json.dumps(config), metric_value, experiment_id),
         )
         self.conn.commit()
+
+    # -------------------------------------------------------- promotion policy
+    def get_promotion_policy(self) -> dict[str, Any]:
+        row = self.conn.execute(
+            "SELECT mode, min_delta, confirmations FROM promotion_policy WHERE project_id=?",
+            (self.project_id,),
+        ).fetchone()
+        if row is None:
+            return {
+                "mode": PROMOTION_MANUAL,
+                "min_delta": DEFAULT_MIN_DELTA,
+                "confirmations": DEFAULT_CONFIRMATIONS,
+            }
+        return {
+            "mode": row["mode"],
+            "min_delta": float(row["min_delta"]),
+            "confirmations": int(row["confirmations"]),
+        }
+
+    def set_promotion_policy(
+        self,
+        mode: str = PROMOTION_MANUAL,
+        min_delta: float = DEFAULT_MIN_DELTA,
+        confirmations: int = DEFAULT_CONFIRMATIONS,
+    ) -> None:
+        if mode not in _PROMOTION_MODES:
+            raise ValueError(f"unknown promotion mode: {mode}")
+        if confirmations < 1:
+            raise ValueError("confirmations must be >= 1")
+        if min_delta < 0:
+            raise ValueError("min_delta must be >= 0")
+        self.conn.execute(
+            "INSERT OR REPLACE INTO promotion_policy "
+            "(project_id, mode, min_delta, confirmations) VALUES (?, ?, ?, ?)",
+            (self.project_id, mode, min_delta, confirmations),
+        )
+        self.conn.commit()
+
+    def reconstructed_config(self, spec: ExperimentSpec) -> dict[str, Any]:
+        """Defaults + current champion overlay + this spec's changes (D-028)."""
+        import json
+
+        base: dict[str, Any] = {}
+        space = self.get_search_space()
+        if space is not None:
+            base.update(space.defaults)
+        champ = self.get_champion()
+        if champ and champ.get("config"):
+            cfg = champ["config"]
+            if isinstance(cfg, str):
+                cfg = json.loads(cfg)
+            if isinstance(cfg, dict):
+                base.update(cfg)
+        for change in spec.changes:
+            base[change.parameter] = change.value
+        return base
+
+    def evaluate_auto_guarded(self, finding: ResearchFinding) -> bool:
+        """Promote when auto_guarded gates pass; write an operational notice (D-028).
+
+        Returns True when a champion update was applied for this finding.
+        """
+        import json
+
+        policy = self.get_promotion_policy()
+        if policy["mode"] != PROMOTION_AUTO_GUARDED:
+            return False
+        if self.is_halted():
+            return False
+        if finding.kind.value != "confirmed":
+            return False
+        champion = self.get_champion()
+        if champion is None:
+            return False
+        manifest = self.get_manifest()
+        if manifest is None:
+            return False
+        row = self.get_experiment(finding.experiment_id)
+        if row is None or row["status"] != "completed" or row["metric_value"] is None:
+            return False
+        spec = ExperimentSpec.model_validate_json(row["spec"])
+        candidate = self.reconstructed_config(spec)
+        identity = json.dumps(candidate, sort_keys=True, default=str)
+        direction = manifest.objective.direction
+        champ_metric = float(champion["metric_value"])
+        min_delta = float(policy["min_delta"])
+        needed = int(policy["confirmations"])
+
+        confirmations: list[dict[str, Any]] = []
+        seen_eids: set[str] = set()
+        seen_seeds: set[int] = set()
+        for f in self.active_findings(kinds=["confirmed"]):
+            exp = self.get_experiment(f.experiment_id)
+            if exp is None or exp["status"] != "completed" or exp["metric_value"] is None:
+                continue
+            if f.experiment_id in seen_eids:
+                continue
+            exp_spec = ExperimentSpec.model_validate_json(exp["spec"])
+            cfg_id = json.dumps(
+                self.reconstructed_config(exp_spec), sort_keys=True, default=str
+            )
+            if cfg_id != identity:
+                continue
+            if not self._beats_champion(
+                float(exp["metric_value"]), champ_metric, direction, min_delta
+            ):
+                continue
+            seed = exp_spec.reproducibility.seed
+            if seed in seen_seeds:
+                continue
+            seen_eids.add(f.experiment_id)
+            seen_seeds.add(seed)
+            confirmations.append({
+                "experiment_id": f.experiment_id,
+                "metric_value": float(exp["metric_value"]),
+                "config": self.reconstructed_config(exp_spec),
+            })
+
+        if len(confirmations) < needed:
+            return False
+        for conf in confirmations:
+            if self._has_harmful_for_experiment(conf["experiment_id"]):
+                return False
+
+        best = confirmations[0]
+        for conf in confirmations[1:]:
+            if direction == "minimize":
+                if conf["metric_value"] < best["metric_value"]:
+                    best = conf
+            elif conf["metric_value"] > best["metric_value"]:
+                best = conf
+
+        self.set_champion(best["config"], best["metric_value"], best["experiment_id"])
+        suffix = finding.experiment_id.removeprefix("exp-")
+        notice = ResearchFinding(
+            finding_id=f"fnd-promo-{suffix}"[:68],
+            project_id=self.project_id,
+            experiment_id=best["experiment_id"],
+            hypothesis_id=spec.hypothesis_id,
+            kind="operational",
+            statement=(
+                f"Auto-guarded promotion: {needed} independent confirmations "
+                f"beat the champion by more than min_delta={min_delta} "
+                f"with no harmful findings."
+            ),
+            confidence=0.9,
+            tags=["promotion", "auto-guarded"],
+            conditions={
+                "config_snapshot": best["config"],
+                "confirmations": [c["experiment_id"] for c in confirmations],
+                "min_delta": min_delta,
+            },
+        )
+        self.save_finding(notice)
+        return True
+
+    @staticmethod
+    def _beats_champion(
+        metric: float, champion_metric: float, direction: str, min_delta: float
+    ) -> bool:
+        delta = champion_metric - metric if direction == "minimize" else metric - champion_metric
+        return delta > min_delta
+
+    def _has_harmful_for_experiment(self, experiment_id: str) -> bool:
+        return any(
+            f.experiment_id == experiment_id
+            for f in self.active_findings(kinds=["harmful"])
+        )
 
     # ----------------------------------------------------------------- internal
     def _assert_project(self, pid: str) -> None:

@@ -103,7 +103,8 @@ Five nouns form the conceptual model ([research/five-nouns.md](research/five-nou
                            │                                 │
                     ┌──────▼───────┐                         │
                     │ PROMOTE GATE │── approved champion ─────┘
-                    │ (human V1)   │
+                    │ manual /     │
+                    │ auto_guarded │
                     └──────────────┘
 ```
 
@@ -145,6 +146,10 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
 - **Consecutive failure** tracking feeds a circuit breaker (ADR-004). Three
   consecutive failures of structurally similar specs halt the strategy and
   write an `operational` finding as the human alert (D-027). Resume is human-gated.
+- **Promotion policy** is pluggable (ADR-004 Q2 / D-028): `manual` (default)
+  requires the human `promote` tool; `auto_guarded` promotes when a `confirmed`
+  finding has N independent confirmations beating the champion by `min_delta`
+  with no active `harmful` finding, and writes an `operational` notice.
 - No cross-project reads or writes in v0.1
 
 The data model is tagged for a future optional shared-prior layer, but sharing
@@ -160,7 +165,7 @@ requires a new ADR — never an implicit shortcut.
 | Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO |
 | Host adapter | `sdk/kav_sdk/adapter.py` | In-process projection of the four operations; `SimulatedHost` + `HostRunner` (D-025) |
 | HTTP adapter | `sdk/kav_sdk/http.py` | OpenAPI 3.0 projection of the same four operations; stdlib server + `HttpHostAdapter` (D-026) |
-| Whitelisted tools | `sdk/kav_sdk/tools.py` | Seven deterministic tools wrapping SDK + memory (`resume_strategy` is human-gated) |
+| Whitelisted tools | `sdk/kav_sdk/tools.py` | Seven deterministic tools wrapping SDK + memory (`resume_strategy` is human-gated; `promote` is the human override) |
 | Agent harness | `sdk/kav_sdk/agent.py` | Deep Agents on LangGraph (ADR-001); raw-graph escape hatch preserved |
 
 Tools are restricted to contract-shaped operations. Shell access, host filesystem

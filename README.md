@@ -12,9 +12,10 @@ policy.
 **Status:** v0.1 — foundation + live cycle + Host Adapter v0.1 (in-process
 `HostAdapter` / `SimulatedHost` / `HostRunner`) + HTTP/OpenAPI projection of
 the four adapter operations + circuit-breaker **halt** (three similar consecutive
-failures stop the strategy and alert a human). Contracts, SDK, memory, and the
-deterministic research cycle are implemented; live LLM-driven cycles remain
-experimental. Promotion stays manual (ADR-004).
+failures stop the strategy and alert a human) + pluggable promotion (`manual`
+default; `auto_guarded` when N independent confirmations beat the champion).
+Contracts, SDK, memory, and the deterministic research cycle are implemented;
+live LLM-driven cycles remain experimental.
 
 ---
 
@@ -48,7 +49,7 @@ Hypothesis → Bounded Experiment → Trusted Evidence → Memory → Better Hyp
 | Execute | Host (adapter) | Runs experiment; KAV never touches the evaluator |
 | Ingest | Host → KAV | `ExperimentResult` — measurement as reported, failures included |
 | Distill | KAV | `ResearchFinding` — durable knowledge with lineage |
-| Promote | Human (V1 default) | Champion update only after explicit approval |
+| Promote | Policy (V1) | `manual` (default, human `promote` tool) or `auto_guarded` (D-028) |
 
 See [docs/architecture.md](docs/architecture.md) for control-plane vs.
 execution-plane separation and adapter operations.

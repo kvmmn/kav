@@ -29,6 +29,7 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
             "failure_streak": memory.consecutive_failures(),
             "similar_failure_streak": memory.consecutive_similar_failures(),
             "circuit_breaker": memory.halt_state(),
+            "promotion_policy": memory.get_promotion_policy(),
         })
 
     def check_spec(spec_json: str) -> str:
@@ -74,13 +75,19 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         return "RESUMED"
 
     def record_finding(finding_json: str) -> str:
-        """DISTILL node: write an immutable finding with lineage."""
+        """DISTILL node: write an immutable finding with lineage.
+
+        In auto_guarded mode (D-028), a confirmed finding may promote the
+        champion when independent-confirmation gates pass.
+        """
         f = ResearchFinding.model_validate_json(finding_json)
         memory.save_finding(f)
+        if memory.evaluate_auto_guarded(f):
+            return f"RECORDED {f.finding_id} PROMOTED (auto_guarded)"
         return f"RECORDED {f.finding_id}"
 
     def promote(config: dict[str, Any], metric_value: float, experiment_id: str) -> str:
-        """PROMOTE_GATE (manual mode): human-approved champion update."""
+        """PROMOTE_GATE: human-approved champion update (override in both modes)."""
         memory.set_champion(config, metric_value, experiment_id)
         return f"PROMOTED (champion metric={metric_value})"
 
