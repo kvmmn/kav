@@ -13,9 +13,10 @@ policy.
 `HostAdapter` / `SimulatedHost` / `HostRunner`) + HTTP/OpenAPI projection of
 the four adapter operations + circuit-breaker **halt** (three similar consecutive
 failures stop the strategy and alert a human) + pluggable promotion (`manual`
-default; `auto_guarded` when N independent confirmations beat the champion).
-Contracts, SDK, memory, and the deterministic research cycle are implemented;
-live LLM-driven cycles remain experimental.
+default; `auto_guarded` when N independent confirmations beat the champion) +
+**minimal desk** (champion + top-k) with deliberate **rejuvenation** of discarded
+approaches. Contracts, SDK, memory, and the deterministic research cycle are
+implemented; live LLM-driven cycles remain experimental.
 
 ---
 
@@ -43,7 +44,7 @@ Hypothesis → Bounded Experiment → Trusted Evidence → Memory → Better Hyp
 
 | Stage | Actor | Output |
 |-------|-------|--------|
-| Observe | KAV | Champion config, active findings, circuit-breaker state |
+| Observe | KAV | Desk (champion + top-k + rejuvenated), circuit-breaker state |
 | Hypothesize | KAV | One falsifiable claim within the search space |
 | Design | KAV | `ExperimentSpec` — single change, fixed budget, reproducible seed |
 | Execute | Host (adapter) | Runs experiment; KAV never touches the evaluator |

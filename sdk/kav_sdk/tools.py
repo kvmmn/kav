@@ -21,15 +21,18 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
     """Build the tool whitelist bound to one project's memory."""
 
     def observe() -> str:
-        """OBSERVE node input: champion config, recent experiments, active findings."""
+        """OBSERVE node input: minimal desk plus operational overlays."""
+        desk = memory.desk()
         return json.dumps({
-            "champion": memory.get_champion(),
+            "champion": desk["champion"],
+            "active_findings": desk["findings"],
+            "desk": desk,
             "recent_experiments": memory.recent_experiments(limit=10),
-            "active_findings": [f.model_dump(mode="json") for f in memory.active_findings(limit=10)],
             "failure_streak": memory.consecutive_failures(),
             "similar_failure_streak": memory.consecutive_similar_failures(),
             "circuit_breaker": memory.halt_state(),
             "promotion_policy": memory.get_promotion_policy(),
+            "desk_policy": memory.get_desk_policy(),
         })
 
     def check_spec(spec_json: str) -> str:
@@ -60,12 +63,15 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         """INGEST node: record the host's honest report. Values stored as-is (Law 1)."""
         result = ExperimentResult.model_validate_json(result_json)
         memory.save_result(result)
-        if memory.evaluate_circuit_breaker(result):
+        halted = memory.evaluate_circuit_breaker(result)
+        rejuvenated = memory.evaluate_rejuvenation()
+        if halted:
             return (
                 f"HALTED {result.experiment_id} status={result.status.value} "
                 "circuit-breaker alert recorded"
             )
-        return f"RECORDED {result.experiment_id} status={result.status.value}"
+        extra = " REJUVENATED" if rejuvenated else ""
+        return f"RECORDED {result.experiment_id} status={result.status.value}{extra}"
 
     def resume_strategy() -> str:
         """Human-gated resume after a circuit-breaker halt (ADR-004 Q3)."""
@@ -73,6 +79,12 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
             return "NOT_HALTED"
         memory.clear_halt()
         return "RESUMED"
+
+    def rejuvenate() -> str:
+        """Human-gated re-surface of discarded approaches (ADR-004 Q1 / D-029)."""
+        if memory.evaluate_rejuvenation(force=True):
+            return "REJUVENATED"
+        return "NO_CANDIDATES"
 
     def record_finding(finding_json: str) -> str:
         """DISTILL node: write an immutable finding with lineage.
@@ -91,4 +103,7 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         memory.set_champion(config, metric_value, experiment_id)
         return f"PROMOTED (champion metric={metric_value})"
 
-    return [observe, check_spec, issue_spec, ingest_result, record_finding, promote, resume_strategy]
+    return [
+        observe, check_spec, issue_spec, ingest_result, record_finding,
+        promote, resume_strategy, rejuvenate,
+    ]

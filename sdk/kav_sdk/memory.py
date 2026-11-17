@@ -69,6 +69,25 @@ CREATE TABLE IF NOT EXISTS promotion_policy (
     min_delta REAL NOT NULL DEFAULT 0,
     confirmations INTEGER NOT NULL DEFAULT 2
 );
+CREATE TABLE IF NOT EXISTS desk_policy (
+    project_id TEXT PRIMARY KEY,
+    k INTEGER NOT NULL DEFAULT 10,
+    rejuvenation_every INTEGER NOT NULL DEFAULT 8,
+    plateau_window INTEGER NOT NULL DEFAULT 5
+);
+CREATE TABLE IF NOT EXISTS rejuvenation_desk (
+    project_id TEXT NOT NULL,
+    finding_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    placed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (project_id, finding_id)
+);
+CREATE TABLE IF NOT EXISTS rejuvenation_state (
+    project_id TEXT PRIMARY KEY,
+    last_reason TEXT,
+    last_at_completed INTEGER,
+    last_finding_id TEXT
+);
 """
 
 _FAIL_STATUSES = frozenset({"failed", "timeout", "rejected"})
@@ -78,6 +97,9 @@ PROMOTION_AUTO_GUARDED = "auto_guarded"
 _PROMOTION_MODES = frozenset({PROMOTION_MANUAL, PROMOTION_AUTO_GUARDED})
 DEFAULT_MIN_DELTA = 0.0
 DEFAULT_CONFIRMATIONS = 2
+DEFAULT_DESK_K = 10
+DEFAULT_REJUVENATION_EVERY = 8
+DEFAULT_PLATEAU_WINDOW = 5
 
 
 class ProjectMemory:
@@ -372,6 +394,216 @@ class ProjectMemory:
             (self.project_id, mode, min_delta, confirmations),
         )
         self.conn.commit()
+
+    # -------------------------------------------------------------- desk (Q1)
+    def get_desk_policy(self) -> dict[str, Any]:
+        row = self.conn.execute(
+            "SELECT k, rejuvenation_every, plateau_window FROM desk_policy "
+            "WHERE project_id=?",
+            (self.project_id,),
+        ).fetchone()
+        if row is None:
+            return {
+                "k": DEFAULT_DESK_K,
+                "rejuvenation_every": DEFAULT_REJUVENATION_EVERY,
+                "plateau_window": DEFAULT_PLATEAU_WINDOW,
+            }
+        return {
+            "k": int(row["k"]),
+            "rejuvenation_every": int(row["rejuvenation_every"]),
+            "plateau_window": int(row["plateau_window"]),
+        }
+
+    def set_desk_policy(
+        self,
+        k: int = DEFAULT_DESK_K,
+        rejuvenation_every: int = DEFAULT_REJUVENATION_EVERY,
+        plateau_window: int = DEFAULT_PLATEAU_WINDOW,
+    ) -> None:
+        if k < 1:
+            raise ValueError("k must be >= 1")
+        if rejuvenation_every < 1:
+            raise ValueError("rejuvenation_every must be >= 1")
+        if plateau_window < 1:
+            raise ValueError("plateau_window must be >= 1")
+        self.conn.execute(
+            "INSERT OR REPLACE INTO desk_policy "
+            "(project_id, k, rejuvenation_every, plateau_window) VALUES (?, ?, ?, ?)",
+            (self.project_id, k, rejuvenation_every, plateau_window),
+        )
+        self.conn.commit()
+
+    def desk(self) -> dict[str, Any]:
+        """Minimal OBSERVE graph state: champion + top-k + rejuvenated (D-029)."""
+        policy = self.get_desk_policy()
+        k = policy["k"]
+        active = self.active_findings(limit=k)
+        rejuvenated = self.rejuvenated_findings()
+        active_ids = {f.finding_id for f in active}
+        extra = [f for f in rejuvenated if f.finding_id not in active_ids]
+        return {
+            "champion": self.get_champion(),
+            "findings": [f.model_dump(mode="json") for f in active],
+            "rejuvenated": [f.model_dump(mode="json") for f in extra],
+            "k": k,
+        }
+
+    def discarded_findings(self, limit: int | None = None) -> list[ResearchFinding]:
+        """Superseded findings, plus refuted findings that fell off the desk."""
+        policy = self.get_desk_policy()
+        cap = policy["k"] if limit is None else limit
+        desk_ids = {f.finding_id for f in self.active_findings(limit=policy["k"])}
+        rows = self.conn.execute(
+            "SELECT data, superseded_by, kind FROM findings WHERE project_id=?",
+            (self.project_id,),
+        ).fetchall()
+        out: list[ResearchFinding] = []
+        for r in rows:
+            finding = ResearchFinding.model_validate_json(r["data"])
+            if r["superseded_by"]:
+                out.append(finding)
+            elif r["kind"] == "refuted" and finding.finding_id not in desk_ids:
+                out.append(finding)
+        out.sort(key=lambda item: item.confidence, reverse=True)
+        return out[:cap]
+
+    def rejuvenated_findings(self) -> list[ResearchFinding]:
+        rows = self.conn.execute(
+            "SELECT r.finding_id, f.data FROM rejuvenation_desk r "
+            "JOIN findings f ON f.finding_id = r.finding_id "
+            "WHERE r.project_id=? ORDER BY r.placed_at DESC",
+            (self.project_id,),
+        ).fetchall()
+        return [ResearchFinding.model_validate_json(r["data"]) for r in rows]
+
+    def completed_count(self) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM experiments WHERE project_id=? AND status='completed'",
+            (self.project_id,),
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+    def is_plateau(self) -> bool:
+        """True when the last plateau_window completed runs do not beat the champion."""
+        policy = self.get_desk_policy()
+        window = policy["plateau_window"]
+        champion = self.get_champion()
+        manifest = self.get_manifest()
+        if champion is None or manifest is None:
+            return False
+        rows = self.conn.execute(
+            "SELECT metric_value, status FROM experiments WHERE project_id=? "
+            "AND status IS NOT NULL ORDER BY seq DESC LIMIT ?",
+            (self.project_id, window),
+        ).fetchall()
+        if len(rows) < window:
+            return False
+        champ_metric = float(champion["metric_value"])
+        direction = manifest.objective.direction
+        for r in rows:
+            if r["status"] != "completed" or r["metric_value"] is None:
+                return False
+            if self._beats_champion(float(r["metric_value"]), champ_metric, direction, 0.0):
+                return False
+        return True
+
+    def conditions_changed(self) -> bool:
+        """True when the search space has a parameter unknown to discarded findings."""
+        space = self.get_search_space()
+        if space is None:
+            return False
+        params = {p.name for p in space.parameters}
+        if not params:
+            return False
+        discarded = self.discarded_findings()
+        if not discarded:
+            return False
+        known: set[str] = set()
+        for finding in discarded:
+            snap = finding.conditions.get("config_snapshot") if finding.conditions else None
+            if isinstance(snap, dict):
+                known.update(snap.keys())
+            known.update(finding.tags)
+        return bool(params - known)
+
+    def evaluate_rejuvenation(self, force: bool = False) -> bool:
+        """Re-surface discarded approaches onto the desk; write an operational notice.
+
+        Triggers: plateau, periodic (every N completed runs), search-space change,
+        or a human `rejuvenate` force. Returns True when the desk was updated.
+        """
+        policy = self.get_desk_policy()
+        discarded = self.discarded_findings(limit=policy["k"])
+        if not discarded:
+            return False
+        completed = self.completed_count()
+        reasons: list[str] = []
+        if force:
+            reasons.append("manual")
+        if self.is_plateau():
+            reasons.append("plateau")
+        every = policy["rejuvenation_every"]
+        if every > 0 and completed >= every and completed % every == 0:
+            reasons.append("periodic")
+        if self.conditions_changed():
+            reasons.append("conditions_changed")
+        if not reasons:
+            return False
+        state = self.conn.execute(
+            "SELECT last_at_completed FROM rejuvenation_state WHERE project_id=?",
+            (self.project_id,),
+        ).fetchone()
+        if not force and state is not None and int(state["last_at_completed"]) == completed:
+            return False
+        last = self.conn.execute(
+            "SELECT experiment_id, spec FROM experiments WHERE project_id=? "
+            "AND status IS NOT NULL ORDER BY seq DESC LIMIT 1",
+            (self.project_id,),
+        ).fetchone()
+        if last is None:
+            return False
+        experiment_id = last["experiment_id"]
+        spec = ExperimentSpec.model_validate_json(last["spec"])
+        reason = ",".join(reasons)
+        self.conn.execute(
+            "DELETE FROM rejuvenation_desk WHERE project_id=?", (self.project_id,)
+        )
+        for finding in discarded:
+            self.conn.execute(
+                "INSERT INTO rejuvenation_desk (project_id, finding_id, reason) "
+                "VALUES (?, ?, ?)",
+                (self.project_id, finding.finding_id, reason),
+            )
+        suffix = f"{completed:04d}-{experiment_id.removeprefix('exp-')}"
+        notice = ResearchFinding(
+            finding_id=f"fnd-reju-{suffix}"[:68],
+            project_id=self.project_id,
+            experiment_id=experiment_id,
+            hypothesis_id=spec.hypothesis_id,
+            kind="operational",
+            statement=(
+                f"Rejuvenation placed {len(discarded)} discarded approach(es) "
+                f"back on the desk ({reason})."
+            ),
+            confidence=0.7,
+            tags=list(dict.fromkeys(["rejuvenation", "desk", *reasons])),
+            conditions={
+                "config_snapshot": {
+                    "reason": reason,
+                    "finding_ids": [f.finding_id for f in discarded],
+                    "completed": completed,
+                }
+            },
+        )
+        self.save_finding(notice)
+        self.conn.execute(
+            "INSERT OR REPLACE INTO rejuvenation_state "
+            "(project_id, last_reason, last_at_completed, last_finding_id) "
+            "VALUES (?, ?, ?, ?)",
+            (self.project_id, reason, completed, notice.finding_id),
+        )
+        self.conn.commit()
+        return True
 
     def reconstructed_config(self, spec: ExperimentSpec) -> dict[str, Any]:
         """Defaults + current champion overlay + this spec's changes (D-028)."""

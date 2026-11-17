@@ -43,7 +43,9 @@ mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
 
 print("1. OBSERVE")
 state = __import__("json").loads(tools["observe"]())
-print("   champion:", state["champion"]["metric_value"], "| findings:", len(state["active_findings"]))
+print("   champion:", state["champion"]["metric_value"], "| desk k:", state["desk"]["k"],
+      "| findings:", len(state["active_findings"]),
+      "| rejuvenated:", len(state["desk"]["rejuvenated"]))
 
 print("2. HYPOTHESIZE: 'lr=0.02 improves correlation'")
 spec = ExperimentSpec(
@@ -73,8 +75,12 @@ print("   ", tools["promote"]({"lr": 0.02}, 0.024, "exp-walk001"))
 
 print("\n8. OBSERVE again — knowledge grew:")
 state = __import__("json").loads(tools["observe"]())
-print("   champion:", state["champion"]["metric_value"], "| findings:", len(state["active_findings"]))
+print("   champion:", state["champion"]["metric_value"], "| desk k:", state["desk"]["k"],
+      "| findings:", len(state["active_findings"]),
+      "| rejuvenated:", len(state["desk"]["rejuvenated"]))
 
 assert state["champion"]["metric_value"] == 0.024
 assert len(state["active_findings"]) == 1
+assert state["desk"]["k"] == 10
+assert state["desk"]["rejuvenated"] == []
 print("\nFULL CYCLE COMPLETE ✓ — plumbing proven; ready for an LLM to drive it.")

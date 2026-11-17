@@ -403,3 +403,152 @@ def test_observe_includes_promotion_policy(mem):
         "min_delta": 0.01,
         "confirmations": 3,
     }
+
+
+# ---- minimal desk + rejuvenation (D-029)
+def test_desk_is_champion_plus_top_k(mem):
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=2)
+    mem.save_spec(spec("exp-d01001"))
+    mem.save_finding(finding("fnd-d01001", kind="confirmed", conf=0.9))
+    mem.save_finding(finding("fnd-d01002", kind="confirmed", conf=0.4))
+    mem.save_finding(finding("fnd-d01003", kind="inconclusive", conf=0.2))
+    desk = mem.desk()
+    assert desk["k"] == 2
+    assert desk["champion"]["metric_value"] == 0.021
+    assert [f["finding_id"] for f in desk["findings"]] == ["fnd-d01001", "fnd-d01002"]
+    assert desk["rejuvenated"] == []
+
+
+def test_desk_excludes_superseded_until_rejuvenation(mem):
+    mem.save_spec(spec("exp-d02001"))
+    mem.save_finding(finding("fnd-d02001", kind="refuted", conf=0.6))
+    mem.supersede_finding("fnd-d02001", finding("fnd-d02002", kind="confirmed", conf=0.8))
+    desk = mem.desk()
+    assert [f["finding_id"] for f in desk["findings"]] == ["fnd-d02002"]
+    discarded = mem.discarded_findings()
+    assert [f.finding_id for f in discarded] == ["fnd-d02001"]
+
+
+def test_plateau_rejuvenates_superseded_finding(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.050, "exp-baseline")
+    mem.set_desk_policy(k=10, rejuvenation_every=99, plateau_window=3)
+    mem.save_spec(spec("exp-d03000"))
+    mem.save_finding(finding("fnd-d03000", kind="refuted", conf=0.55))
+    mem.supersede_finding("fnd-d03000", finding("fnd-d0300n", kind="confirmed", conf=0.8))
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    for i, eid in enumerate(["exp-d03001", "exp-d03002", "exp-d03003"], start=1):
+        mem.save_spec(spec(eid, seed=i))
+        out = tools["ingest_result"](result(eid, value=0.040).model_dump_json())
+    assert "REJUVENATED" in out
+    desk = mem.desk()
+    assert "fnd-d03000" in [f["finding_id"] for f in desk["rejuvenated"]]
+    notices = [f for f in mem.active_findings(kinds=["operational"])
+               if "rejuvenation" in f.tags]
+    assert len(notices) == 1
+    assert "plateau" in notices[0].tags
+
+
+def test_periodic_rejuvenation_every_n_completed(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=10, rejuvenation_every=2, plateau_window=99)
+    mem.save_spec(spec("exp-d04000"))
+    mem.save_finding(finding("fnd-d04000", kind="refuted", conf=0.5))
+    mem.supersede_finding("fnd-d04000", finding("fnd-d0400n", kind="confirmed", conf=0.9))
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-d04001", seed=1))
+    first = tools["ingest_result"](result("exp-d04001", value=0.030).model_dump_json())
+    assert "REJUVENATED" not in first
+    mem.save_spec(spec("exp-d04002", seed=2))
+    second = tools["ingest_result"](result("exp-d04002", value=0.031).model_dump_json())
+    assert "REJUVENATED" in second
+    notices = [f for f in mem.active_findings(kinds=["operational"])
+               if "periodic" in f.tags]
+    assert len(notices) == 1
+
+
+def test_new_search_space_parameter_rejuvenates(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=10, rejuvenation_every=99, plateau_window=99)
+    old = ResearchFinding(
+        finding_id="fnd-d05000", project_id="numerai-demo", experiment_id="exp-aaa111",
+        kind="refuted", statement="lr=0.09 hurt correlation on the old feature set.",
+        confidence=0.6, tags=["lr"],
+        conditions={"config_snapshot": {"lr": 0.09}},
+    )
+    mem.save_spec(spec("exp-d05000"))
+    mem.save_finding(old)
+    mem.supersede_finding("fnd-d05000", finding("fnd-d0500n", kind="confirmed", conf=0.9))
+    mem.save_search_space(SearchSpace(
+        project_id="numerai-demo",
+        parameters=[
+            Parameter(name="lr", type="number", domain=Domain(kind="range", min=0.001, max=0.1)),
+            Parameter(name="n_trees", type="integer", domain=Domain(kind="range", min=10, max=400)),
+        ],
+        defaults={"lr": 0.01, "n_trees": 100},
+    ))
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-d05001", seed=3))
+    out = tools["ingest_result"](result("exp-d05001", value=0.022).model_dump_json())
+    assert "REJUVENATED" in out
+    notices = [f for f in mem.active_findings(kinds=["operational"])
+               if "conditions_changed" in f.tags]
+    assert len(notices) == 1
+
+
+def test_no_discarded_findings_skips_rejuvenation(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=10, rejuvenation_every=1, plateau_window=1)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-d06001"))
+    out = tools["ingest_result"](result("exp-d06001", value=0.022).model_dump_json())
+    assert "REJUVENATED" not in out
+    assert tools["rejuvenate"]() == "NO_CANDIDATES"
+
+
+def test_human_rejuvenate_forces_desk_slot(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.save_manifest(manifest())
+    mem.save_search_space(space())
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=10, rejuvenation_every=99, plateau_window=99)
+    mem.save_spec(spec("exp-d07000"))
+    mem.save_result(result("exp-d07000", value=0.022))
+    mem.save_finding(finding("fnd-d07000", kind="refuted", conf=0.4))
+    mem.supersede_finding("fnd-d07000", finding("fnd-d0700n", kind="confirmed", conf=0.9))
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    assert tools["rejuvenate"]() == "REJUVENATED"
+    desk = mem.desk()
+    assert "fnd-d07000" in [f["finding_id"] for f in desk["rejuvenated"]]
+    notices = [f for f in mem.active_findings(kinds=["operational"]) if "manual" in f.tags]
+    assert len(notices) == 1
+
+
+def test_observe_includes_desk(mem):
+    from kav_sdk.tools import make_kav_tools
+    import json
+
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    state = json.loads(tools["observe"]())
+    assert state["desk"]["k"] == 10
+    assert state["desk"]["champion"]["metric_value"] == 0.021
+    assert state["desk"]["findings"] == state["active_findings"]
+    assert state["desk_policy"]["k"] == 10

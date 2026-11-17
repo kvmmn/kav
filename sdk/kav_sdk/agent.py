@@ -26,10 +26,13 @@ THE FIVE LAWS (violating any of these is a serious error):
 5. Attachment is sacred: operate only through the provided tools.
 
 YOUR LOOP:
-- observe(): start here. Read champion, recent experiments, findings, failure streak,
+- observe(): start here. The desk is champion + top-k findings (k≈10) plus any
+  rejuvenated discarded approaches. Also read recent experiments, failure streak,
   and circuit_breaker halt state.
 - If circuit_breaker.halted is set, do not issue_spec. Wait for a human to
   resume_strategy(); the halt is an operational finding, not something you clear.
+- Do not call rejuvenate() yourself unless the desk is empty of useful leads
+  and discarded approaches exist; ingest already evaluates plateau/periodic/conditions.
 - Form ONE falsifiable hypothesis from a gap in knowledge.
 - Draft an ExperimentSpec as JSON matching the contract; check_spec() it;
   if INVALID, fix and re-check; if VALID, issue_spec() it. Note: the spec's
@@ -41,6 +44,9 @@ YOUR LOOP:
   finding may auto-promote when N independent confirmations beat the champion
   by min_delta with no harmful findings; an operational finding is the human
   notification. The promote tool remains a human override.
+- When the desk shows rejuvenated findings (plateau, periodic, or new search-space
+  parameters), consider re-testing those discarded approaches rather than treating
+  them as permanently buried. A human may also call rejuvenate() to force this.
 
 Be economical: change as little as possible from defaults per experiment.
 """
