@@ -58,8 +58,18 @@ print("3. VALIDATE:", tools["check_spec"](spec.model_dump_json()))
 
 print("4. ISSUE:", tools["issue_spec"](spec.model_dump_json()))
 
-print("5. HOST EXECUTES via HostRunner.drain_pending()")
-print("   DRAINED:", runner.drain_pending(), "pending spec(s)")
+print("5. DISPATCH host run (async; agent continues other hypotheses)")
+print("   STARTED:", runner.dispatch_pending(), "in-flight spec(s)")
+second = ExperimentSpec(
+    experiment_id="exp-walk002", project_id="numerai-demo", hypothesis_id="hyp-lr-003",
+    changes=[Change(parameter="lr", value=0.03)],
+    reproducibility={"seed": 43},
+)
+print("   ISSUE while in-flight:", tools["issue_spec"](second.model_dump_json()))
+print("   pending:", [s.experiment_id for s in mem.pending_specs()],
+      "| inflight:", [s.experiment_id for s in mem.inflight_specs()])
+print("   COLLECTED:", runner.collect_finished(timeout=5), "result(s) → wakes queued")
+print("   DRAIN remaining:", runner.drain_pending(), "spec(s)")
 
 print("6. DISTILL finding")
 finding = ResearchFinding(
@@ -73,14 +83,19 @@ print("   ", tools["record_finding"](finding.model_dump_json()))
 print("7. PROMOTE_GATE (human approves)")
 print("   ", tools["promote"]({"lr": 0.02}, 0.024, "exp-walk001"))
 
-print("\n8. OBSERVE again — knowledge grew:")
+print("\n8. OBSERVE again — knowledge grew + wakes delivered:")
 state = __import__("json").loads(tools["observe"]())
 print("   champion:", state["champion"]["metric_value"], "| desk k:", state["desk"]["k"],
       "| findings:", len(state["active_findings"]),
-      "| rejuvenated:", len(state["desk"]["rejuvenated"]))
+      "| rejuvenated:", len(state["desk"]["rejuvenated"]),
+      "| wakes:", [w["experiment_id"] for w in state["wakes"]],
+      "| pending:", state["pending"], "| inflight:", state["inflight"])
 
 assert state["champion"]["metric_value"] == 0.024
 assert len(state["active_findings"]) == 1
 assert state["desk"]["k"] == 10
 assert state["desk"]["rejuvenated"] == []
+assert {w["experiment_id"] for w in state["wakes"]} == {"exp-walk001", "exp-walk002"}
+assert state["pending"] == []
+assert state["inflight"] == []
 print("\nFULL CYCLE COMPLETE ✓ — plumbing proven; ready for an LLM to drive it.")

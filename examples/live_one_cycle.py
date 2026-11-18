@@ -2,8 +2,9 @@
 
 The agent (LLM) does all thinking: observe → hypothesize → spec → analyze →
 finding → promotion proposal. The host side is a SimulatedHost whose
-evaluator honestly reports metric = f(config). HostRunner drains issued
-specs and ingests results, exactly as a real adapter would.
+evaluator honestly reports metric = f(config). HostRunner may dispatch issued
+specs asynchronously (D-030); this live loop still uses drain_pending so each
+turn waits for honest results, exactly as a real adapter would.
 
 Run:
     export OPENROUTER_API_KEY=sk-or-...

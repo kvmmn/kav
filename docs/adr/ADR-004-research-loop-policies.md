@@ -12,6 +12,7 @@ Retrieval mechanism designed so a rich-history digest mode is a config change la
 ## Q2 — Pauses: parallel async execution; promotion policy is pluggable
 - After DESIGN, KAV continues working on other hypotheses while the host executes
   asynchronously. The loop is event-driven (wakes on result ingestion).
+  Implemented as D-030 (`dispatch_pending` / `collect_finished` / OBSERVE wakes).
 - Promotion policy is a **pluggable component** with two V1 modes:
   - `manual` (default): every promotion requires human approval.
   - `auto_guarded`: auto-promote only when improvement exceeds threshold on N

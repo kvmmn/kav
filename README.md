@@ -15,8 +15,10 @@ the four adapter operations + circuit-breaker **halt** (three similar consecutiv
 failures stop the strategy and alert a human) + pluggable promotion (`manual`
 default; `auto_guarded` when N independent confirmations beat the champion) +
 **minimal desk** (champion + top-k) with deliberate **rejuvenation** of discarded
-approaches. Contracts, SDK, memory, and the deterministic research cycle are
-implemented; live LLM-driven cycles remain experimental.
+approaches + **event-driven wake** (issue further hypotheses while the host
+runs; OBSERVE consumes `result_ingested` wakes). Contracts, SDK, memory, and
+the deterministic research cycle are implemented; live LLM-driven cycles remain
+experimental.
 
 ---
 
@@ -117,8 +119,8 @@ python3 examples/walkthrough_one_cycle.py
 ```
 
 The walkthrough simulates the full loop — observe → hypothesize → validate →
-issue → HostRunner drain → distill → promote — using in-memory tools, a
-SimulatedHost, and a temporary SQLite store.
+issue → HostRunner dispatch (async) / collect → distill → promote — using
+in-memory tools, a SimulatedHost, and a temporary SQLite store.
 
 Optional: `examples/live_one_cycle.py` runs an LLM-driven cycle when
 `OPENROUTER_API_KEY` is set. This path is experimental and not required to

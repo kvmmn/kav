@@ -21,8 +21,13 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
     """Build the tool whitelist bound to one project's memory."""
 
     def observe() -> str:
-        """OBSERVE node input: minimal desk plus operational overlays."""
+        """OBSERVE node input: minimal desk plus operational overlays.
+
+        Consumes event-driven wakes (D-030) so each result ingestion is
+        delivered to the control plane once.
+        """
         desk = memory.desk()
+        wakes = memory.consume_wakes()
         return json.dumps({
             "champion": desk["champion"],
             "active_findings": desk["findings"],
@@ -33,6 +38,10 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
             "circuit_breaker": memory.halt_state(),
             "promotion_policy": memory.get_promotion_policy(),
             "desk_policy": memory.get_desk_policy(),
+            "execution_policy": memory.get_execution_policy(),
+            "pending": [s.experiment_id for s in memory.pending_specs()],
+            "inflight": [s.experiment_id for s in memory.inflight_specs()],
+            "wakes": wakes,
         })
 
     def check_spec(spec_json: str) -> str:

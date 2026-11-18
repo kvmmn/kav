@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     result TEXT,
     status TEXT,
     metric_value REAL,
+    started_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS findings (
@@ -88,6 +89,18 @@ CREATE TABLE IF NOT EXISTS rejuvenation_state (
     last_at_completed INTEGER,
     last_finding_id TEXT
 );
+CREATE TABLE IF NOT EXISTS execution_policy (
+    project_id TEXT PRIMARY KEY,
+    max_inflight INTEGER NOT NULL DEFAULT 2
+);
+CREATE TABLE IF NOT EXISTS wake_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    experiment_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    consumed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 _FAIL_STATUSES = frozenset({"failed", "timeout", "rejected"})
@@ -100,6 +113,8 @@ DEFAULT_CONFIRMATIONS = 2
 DEFAULT_DESK_K = 10
 DEFAULT_REJUVENATION_EVERY = 8
 DEFAULT_PLATEAU_WINDOW = 5
+DEFAULT_MAX_INFLIGHT = 2
+WAKE_RESULT_INGESTED = "result_ingested"
 
 
 class ProjectMemory:
@@ -112,6 +127,7 @@ class ProjectMemory:
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(_SCHEMA)
+        self._migrate_experiments_started_at()
         self.conn.commit()
 
     def close(self) -> None:
@@ -169,6 +185,7 @@ class ProjectMemory:
                 result.experiment_id,
             ),
         )
+        self.record_wake(result.experiment_id, WAKE_RESULT_INGESTED)
         self.conn.commit()
 
     def get_experiment(self, experiment_id: str) -> dict[str, Any] | None:
@@ -185,13 +202,80 @@ class ProjectMemory:
         return [dict(r) for r in rows]
 
     def pending_specs(self) -> list[ExperimentSpec]:
-        """Issued specs whose result is still NULL, oldest first (FIFO)."""
+        """Issued specs not yet started, oldest first (FIFO). In-flight are excluded."""
         rows = self.conn.execute(
             "SELECT spec FROM experiments WHERE project_id=? AND result IS NULL "
-            "ORDER BY seq ASC",
+            "AND started_at IS NULL ORDER BY seq ASC",
             (self.project_id,),
         ).fetchall()
         return [ExperimentSpec.model_validate_json(r["spec"]) for r in rows]
+
+    def inflight_specs(self) -> list[ExperimentSpec]:
+        """Started specs whose result is still NULL, oldest first."""
+        rows = self.conn.execute(
+            "SELECT spec FROM experiments WHERE project_id=? AND result IS NULL "
+            "AND started_at IS NOT NULL ORDER BY seq ASC",
+            (self.project_id,),
+        ).fetchall()
+        return [ExperimentSpec.model_validate_json(r["spec"]) for r in rows]
+
+    def mark_started(self, experiment_id: str) -> None:
+        """Mark a queued spec as in-flight (D-030). No-op if already started or done."""
+        if not self._experiment_exists(experiment_id):
+            raise KeyError(f"unknown experiment: {experiment_id}")
+        self.conn.execute(
+            "UPDATE experiments SET started_at=datetime('now') "
+            "WHERE experiment_id=? AND result IS NULL AND started_at IS NULL",
+            (experiment_id,),
+        )
+        self.conn.commit()
+
+    def get_execution_policy(self) -> dict[str, Any]:
+        row = self.conn.execute(
+            "SELECT max_inflight FROM execution_policy WHERE project_id=?",
+            (self.project_id,),
+        ).fetchone()
+        if row is None:
+            return {"max_inflight": DEFAULT_MAX_INFLIGHT}
+        return {"max_inflight": int(row["max_inflight"])}
+
+    def set_execution_policy(self, max_inflight: int = DEFAULT_MAX_INFLIGHT) -> None:
+        if max_inflight < 1:
+            raise ValueError("max_inflight must be >= 1")
+        self.conn.execute(
+            "INSERT OR REPLACE INTO execution_policy (project_id, max_inflight) "
+            "VALUES (?, ?)",
+            (self.project_id, max_inflight),
+        )
+        self.conn.commit()
+
+    def record_wake(self, experiment_id: str, kind: str = WAKE_RESULT_INGESTED) -> None:
+        """Queue an event-driven wake (ADR-004 Q2 / D-030). Caller commits."""
+        self.conn.execute(
+            "INSERT INTO wake_events (project_id, experiment_id, kind) VALUES (?, ?, ?)",
+            (self.project_id, experiment_id, kind),
+        )
+
+    def unconsumed_wakes(self) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT seq, experiment_id, kind, created_at FROM wake_events "
+            "WHERE project_id=? AND consumed=0 ORDER BY seq ASC",
+            (self.project_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def consume_wakes(self) -> list[dict[str, Any]]:
+        """Return and mark unconsumed wakes (OBSERVE delivery)."""
+        wakes = self.unconsumed_wakes()
+        if not wakes:
+            return []
+        ids = [w["seq"] for w in wakes]
+        self.conn.execute(
+            f"UPDATE wake_events SET consumed=1 WHERE seq IN ({','.join('?' * len(ids))})",
+            ids,
+        )
+        self.conn.commit()
+        return wakes
 
     def consecutive_failures(self) -> int:
         """Length of the current failure streak (any failed/timeout/rejected)."""
@@ -740,6 +824,14 @@ class ProjectMemory:
     def _assert_project(self, pid: str) -> None:
         if pid != self.project_id:
             raise ValueError(f"Law 4: record belongs to '{pid}', memory is '{self.project_id}'")
+
+    def _migrate_experiments_started_at(self) -> None:
+        cols = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(experiments)").fetchall()
+        }
+        if "started_at" not in cols:
+            self.conn.execute("ALTER TABLE experiments ADD COLUMN started_at TEXT")
 
     def _experiment_exists(self, eid: str) -> bool:
         return self.conn.execute(

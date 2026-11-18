@@ -15,7 +15,7 @@ provides a **research operating layer** that:
 1. Reads a host-declared manifest and search space
 2. Proposes one hypothesis at a time within declared bounds
 3. Issues machine-readable experiment specifications
-4. Waits for the host evaluator to report trusted evidence
+4. Continues other hypotheses while the host evaluator runs; wakes on result ingest
 5. Distills findings into project-local memory
 6. Uses memory to inform the next hypothesis
 
@@ -154,6 +154,9 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
 - **Desk** is the OBSERVE graph state (ADR-004 Q1 / D-029): champion + top-k
   active findings. Discarded approaches re-enter the desk on plateau, a
   periodic cadence, a search-space condition change, or a human `rejuvenate`.
+- **Execution** is event-driven (ADR-004 Q2 / D-030): queued vs in-flight specs,
+  `max_inflight` (default 2), and `result_ingested` wakes delivered once on
+  OBSERVE. Sequential `drain_pending` remains for halt-safe convenience.
 - No cross-project reads or writes in v0.1
 
 The data model is tagged for a future optional shared-prior layer, but sharing
@@ -166,8 +169,8 @@ requires a new ADR — never an implicit shortcut.
 | Component | Location | Notes |
 |-----------|----------|-------|
 | Contract models | `sdk/kav_sdk/models.py` | Pydantic; enforces Laws 1–3 in validation |
-| Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO |
-| Host adapter | `sdk/kav_sdk/adapter.py` | In-process projection of the four operations; `SimulatedHost` + `HostRunner` (D-025) |
+| Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO; in-flight + wakes (D-030) |
+| Host adapter | `sdk/kav_sdk/adapter.py` | In-process projection of the four operations; `SimulatedHost` + `HostRunner` (D-025); `dispatch_pending` / `collect_finished` (D-030) |
 | HTTP adapter | `sdk/kav_sdk/http.py` | OpenAPI 3.0 projection of the same four operations; stdlib server + `HttpHostAdapter` (D-026) |
 | Whitelisted tools | `sdk/kav_sdk/tools.py` | Eight deterministic tools wrapping SDK + memory (`resume_strategy` and `rejuvenate` are human-gated; `promote` is the human override) |
 | Agent harness | `sdk/kav_sdk/agent.py` | Deep Agents on LangGraph (ADR-001); raw-graph escape hatch preserved |

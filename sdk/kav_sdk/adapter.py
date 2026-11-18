@@ -3,11 +3,13 @@
 The JSON Schemas in contracts/ remain canonical (ADR-003, D-008, D-009).
 This module is the Python library transport: attach a host, drain issued
 specs, ingest host-reported results. HTTP/OpenAPI lives in `kav_sdk.http`
-(D-026).
+(D-026). Event-driven dispatch (D-030) starts host runs without blocking
+the control plane.
 """
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, Protocol, runtime_checkable
 
 from kav_sdk.memory import ProjectMemory
@@ -97,19 +99,71 @@ class HostRunner:
         self.memory = memory
         self.adapter = adapter
         self._ingest = {t.__name__: t for t in make_kav_tools(memory)}["ingest_result"]
+        self._futures: dict[str, Future[Any]] = {}
+        self._pool: ThreadPoolExecutor | None = None
 
     def attach(self) -> None:
         """Copy host declarations into project memory (adapter's job, not the agent's)."""
         self.memory.save_manifest(self.adapter.manifest())
         self.memory.save_search_space(self.adapter.search_space())
 
+    def dispatch_pending(self) -> int:
+        """Start queued specs up to max_inflight without waiting (D-030).
+
+        Returns how many host runs were started. The agent may issue more
+        specs while these execute. Ingest happens in `collect_finished`.
+        Halted strategies start nothing.
+        """
+        if self.memory.is_halted():
+            return 0
+        room = self.memory.get_execution_policy()["max_inflight"] - len(
+            self.memory.inflight_specs()
+        )
+        started = 0
+        for spec in self.memory.pending_specs():
+            if room <= 0 or self.memory.is_halted():
+                break
+            self.memory.mark_started(spec.experiment_id)
+            self._futures[spec.experiment_id] = self._executor().submit(
+                self._run_one, spec
+            )
+            started += 1
+            room -= 1
+        return started
+
+    def collect_finished(self, timeout: float | None = 0) -> int:
+        """Ingest completed host runs on the control-plane thread. Returns count.
+
+        `timeout=0` polls already-done futures. `timeout=None` waits for every
+        in-flight future. A positive timeout waits that many seconds then
+        ingests whatever finished. Halt still blocks further dispatch; already
+        started runs are ingested as they complete.
+        """
+        if not self._futures:
+            return 0
+        if timeout is None:
+            wait(list(self._futures.values()))
+        elif timeout > 0:
+            wait(list(self._futures.values()), timeout=timeout)
+        n = 0
+        for eid, fut in list(self._futures.items()):
+            if not fut.done():
+                continue
+            reported = fut.result()
+            del self._futures[eid]
+            self._ingest(reported.model_dump_json())
+            n += 1
+        return n
+
     def drain_pending(self) -> int:
         """Run pending specs FIFO; ingest each host-reported result. Returns count.
 
-        Stops without running further specs once the circuit breaker has halted
-        the strategy (D-027). Already-ingested results stay recorded.
+        Sequential path (D-025): used by walkthrough/live convenience and halt
+        tests. Stops without running further specs once the circuit breaker has
+        halted the strategy (D-027). Already-ingested results stay recorded.
+        Also waits for any async in-flight runs started via `dispatch_pending`.
         """
-        n = 0
+        n = self.collect_finished(timeout=None)
         for spec in self.memory.pending_specs():
             if self.memory.is_halted():
                 break
@@ -118,3 +172,20 @@ class HostRunner:
             self._ingest(reported.model_dump_json())
             n += 1
         return n
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=False, cancel_futures=False)
+            self._pool = None
+
+    def _executor(self) -> ThreadPoolExecutor:
+        if self._pool is None:
+            workers = self.memory.get_execution_policy()["max_inflight"]
+            self._pool = ThreadPoolExecutor(
+                max_workers=workers, thread_name_prefix="kav-host"
+            )
+        return self._pool
+
+    def _run_one(self, spec: ExperimentSpec) -> ExperimentResult:
+        raw = self.adapter.run_experiment(spec)
+        return self.adapter.report_result(raw)

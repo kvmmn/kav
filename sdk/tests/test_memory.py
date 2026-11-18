@@ -552,3 +552,39 @@ def test_observe_includes_desk(mem):
     assert state["desk"]["champion"]["metric_value"] == 0.021
     assert state["desk"]["findings"] == state["active_findings"]
     assert state["desk_policy"]["k"] == 10
+    assert state["execution_policy"]["max_inflight"] == 2
+    assert state["pending"] == []
+    assert state["inflight"] == []
+    assert state["wakes"] == []
+
+
+# ---- event-driven wake / in-flight (D-030)
+def test_mark_started_moves_spec_from_pending_to_inflight(mem):
+    mem.save_spec(spec("exp-wake01"))
+    mem.save_spec(spec("exp-wake02"))
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-wake01", "exp-wake02"]
+    mem.mark_started("exp-wake01")
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-wake02"]
+    assert [s.experiment_id for s in mem.inflight_specs()] == ["exp-wake01"]
+    mem.save_result(result("exp-wake01"))
+    assert mem.inflight_specs() == []
+    assert [w["experiment_id"] for w in mem.unconsumed_wakes()] == ["exp-wake01"]
+    assert [w["kind"] for w in mem.unconsumed_wakes()] == ["result_ingested"]
+
+
+def test_observe_consumes_wakes_once(mem):
+    from kav_sdk.tools import make_kav_tools
+    import json
+
+    mem.save_spec(spec("exp-wake10"))
+    mem.save_result(result("exp-wake10"))
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    first = json.loads(tools["observe"]())
+    assert [w["experiment_id"] for w in first["wakes"]] == ["exp-wake10"]
+    second = json.loads(tools["observe"]())
+    assert second["wakes"] == []
+
+
+def test_execution_policy_rejects_non_positive_inflight(mem):
+    with pytest.raises(ValueError, match="max_inflight"):
+        mem.set_execution_policy(max_inflight=0)

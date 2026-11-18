@@ -1,4 +1,6 @@
-"""Tests for Host Adapter v0.1 (D-025)."""
+"""Tests for Host Adapter v0.1 (D-025) and event-driven dispatch (D-030)."""
+import threading
+
 import pytest
 
 from kav_sdk import (
@@ -141,3 +143,83 @@ def test_mismatched_result_id_rejected(mem):
     host = SimulatedHost(manifest(), space(), wrong)
     with pytest.raises(ValueError, match="experiment_id"):
         host.run_experiment(spec())
+
+
+def test_dispatch_allows_issue_while_host_runs(mem):
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow(params):
+        started.set()
+        assert release.wait(timeout=5)
+        return true_metric(params)
+
+    runner = HostRunner(mem, SimulatedHost(manifest(), space(), slow))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    assert tools["issue_spec"](spec("exp-ada201", lr=0.02).model_dump_json()).startswith(
+        "ISSUED"
+    )
+    assert runner.dispatch_pending() == 1
+    assert started.wait(timeout=5)
+    assert [s.experiment_id for s in mem.inflight_specs()] == ["exp-ada201"]
+    assert tools["issue_spec"](spec("exp-ada202", lr=0.04).model_dump_json()).startswith(
+        "ISSUED"
+    )
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada202"]
+    release.set()
+    assert runner.collect_finished(timeout=5) == 1
+    assert mem.get_experiment("exp-ada201")["status"] == "completed"
+    assert mem.unconsumed_wakes()[0]["experiment_id"] == "exp-ada201"
+    assert runner.dispatch_pending() == 1
+    assert runner.collect_finished(timeout=5) == 1
+    assert mem.get_experiment("exp-ada202")["status"] == "completed"
+    runner.close()
+
+
+def test_dispatch_respects_max_inflight(mem):
+    started = threading.Event()
+    release = threading.Event()
+    running = {"n": 0}
+    lock = threading.Lock()
+
+    def slow(params):
+        with lock:
+            running["n"] += 1
+            if running["n"] == 1:
+                started.set()
+        assert release.wait(timeout=5)
+        return true_metric(params)
+
+    mem.set_execution_policy(max_inflight=1)
+    runner = HostRunner(mem, SimulatedHost(manifest(), space(), slow))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    tools["issue_spec"](spec("exp-ada301", lr=0.02).model_dump_json())
+    tools["issue_spec"](spec("exp-ada302", lr=0.04).model_dump_json())
+    assert runner.dispatch_pending() == 1
+    assert started.wait(timeout=5)
+    assert runner.dispatch_pending() == 0
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada302"]
+    release.set()
+    assert runner.collect_finished(timeout=5) == 1
+    assert runner.dispatch_pending() == 1
+    assert runner.collect_finished(timeout=5) == 1
+    runner.close()
+
+
+def test_dispatch_is_noop_when_halted(mem):
+    def boom(_params):
+        raise RuntimeError("evaluator crashed")
+
+    runner = HostRunner(mem, SimulatedHost(manifest(), space(), boom))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    for eid in ["exp-ada401", "exp-ada402", "exp-ada403", "exp-ada404"]:
+        tools["issue_spec"](spec(eid).model_dump_json())
+    assert runner.drain_pending() == 3
+    assert mem.is_halted()
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada404"]
+    assert runner.dispatch_pending() == 0
+    assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada404"]
+    runner.close()
