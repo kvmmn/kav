@@ -6,7 +6,7 @@ from kav_sdk import (
     ExperimentSpec, Evidence, FindingKind, Objective, Parameter,
     ProjectManifest, ResearchFinding, SearchSpace,
 )
-from kav_sdk.memory import ProjectMemory
+from kav_sdk.memory import DESK_MINIMAL, DESK_RICH_DIGEST, ProjectMemory
 
 
 @pytest.fixture()
@@ -415,6 +415,8 @@ def test_desk_is_champion_plus_top_k(mem):
     mem.save_finding(finding("fnd-d01003", kind="inconclusive", conf=0.2))
     desk = mem.desk()
     assert desk["k"] == 2
+    assert desk["mode"] == DESK_MINIMAL
+    assert "digest" not in desk
     assert desk["champion"]["metric_value"] == 0.021
     assert [f["finding_id"] for f in desk["findings"]] == ["fnd-d01001", "fnd-d01002"]
     assert desk["rejuvenated"] == []
@@ -549,9 +551,12 @@ def test_observe_includes_desk(mem):
     tools = {t.__name__: t for t in make_kav_tools(mem)}
     state = json.loads(tools["observe"]())
     assert state["desk"]["k"] == 10
+    assert state["desk"]["mode"] == DESK_MINIMAL
+    assert "digest" not in state["desk"]
     assert state["desk"]["champion"]["metric_value"] == 0.021
     assert state["desk"]["findings"] == state["active_findings"]
     assert state["desk_policy"]["k"] == 10
+    assert state["desk_policy"]["mode"] == DESK_MINIMAL
     assert state["execution_policy"]["max_inflight"] == 2
     assert state["pending"] == []
     assert state["inflight"] == []
@@ -588,3 +593,63 @@ def test_observe_consumes_wakes_once(mem):
 def test_execution_policy_rejects_non_positive_inflight(mem):
     with pytest.raises(ValueError, match="max_inflight"):
         mem.set_execution_policy(max_inflight=0)
+
+
+# ---- rich-history digest as desk config (D-031)
+def test_rich_digest_is_a_desk_config_change(mem):
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=1, mode=DESK_RICH_DIGEST)
+    mem.save_spec(spec("exp-d08001"))
+    mem.save_finding(finding("fnd-d08001", kind="confirmed", conf=0.9))
+    mem.save_finding(finding("fnd-d08002", kind="inconclusive", conf=0.3))
+    mem.supersede_finding("fnd-d08002", finding("fnd-d08003", kind="refuted", conf=0.4))
+    desk = mem.desk()
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert [f["finding_id"] for f in desk["findings"]] == ["fnd-d08001"]
+    digest = desk["digest"]
+    assert digest["total_findings"] == 3
+    assert digest["superseded"] == 1
+    assert digest["by_kind"]["confirmed"] == 1
+    off_ids = {item["finding_id"] for item in digest["off_desk"]}
+    assert "fnd-d08001" not in off_ids
+    assert "fnd-d08002" in off_ids
+    assert "fnd-d08003" in off_ids
+    superseded_row = next(item for item in digest["off_desk"] if item["finding_id"] == "fnd-d08002")
+    assert superseded_row["superseded"] is True
+    assert digest["off_desk_truncated"] == 0
+
+
+def test_desk_mode_switch_drops_digest(mem):
+    mem.set_desk_policy(k=10, mode=DESK_RICH_DIGEST)
+    assert "digest" in mem.desk()
+    mem.set_desk_policy(k=10, mode=DESK_MINIMAL)
+    assert mem.desk()["mode"] == DESK_MINIMAL
+    assert "digest" not in mem.desk()
+
+
+def test_set_desk_policy_preserves_mode_when_omitted(mem):
+    mem.set_desk_policy(k=4, mode=DESK_RICH_DIGEST)
+    mem.set_desk_policy(k=2)
+    policy = mem.get_desk_policy()
+    assert policy["k"] == 2
+    assert policy["mode"] == DESK_RICH_DIGEST
+
+
+def test_unknown_desk_mode_rejected(mem):
+    with pytest.raises(ValueError, match="unknown desk mode"):
+        mem.set_desk_policy(mode="verbose")
+
+
+def test_observe_rich_digest_includes_digest(mem):
+    from kav_sdk.tools import make_kav_tools
+    import json
+
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=10, mode=DESK_RICH_DIGEST)
+    mem.save_spec(spec("exp-d09001"))
+    mem.save_finding(finding("fnd-d09001", kind="confirmed", conf=0.8))
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    state = json.loads(tools["observe"]())
+    assert state["desk_policy"]["mode"] == DESK_RICH_DIGEST
+    assert state["desk"]["digest"]["total_findings"] == 1
+    assert state["desk"]["digest"]["off_desk"] == []

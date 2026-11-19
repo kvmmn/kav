@@ -8,6 +8,7 @@ BUT: the strategy layer may deliberately re-surface previously discarded approac
 ("rejuvenation") — e.g., when conditions changed (new data, new features, plateau)
 or periodically, so old failures can be rethought rather than permanently buried.
 Retrieval mechanism designed so a rich-history digest mode is a config change later.
+Implemented as D-031: `desk_policy.mode` `minimal` (default) or `rich_digest`.
 
 ## Q2 — Pauses: parallel async execution; promotion policy is pluggable
 - After DESIGN, KAV continues working on other hypotheses while the host executes

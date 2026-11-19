@@ -71,6 +71,8 @@ Five nouns form the conceptual model ([research/five-nouns.md](research/five-nou
                     │ desk: champ  │                         │
                     │ + top-k +    │                         │
                     │ rejuvenated  │                         │
+                    │ (+ digest if │                         │
+                    │  rich_digest)│                         │
                     └──────┬───────┘                         │
                            │                                 │
                     ┌──────▼───────┐                         │
@@ -151,9 +153,11 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
   requires the human `promote` tool; `auto_guarded` promotes when a `confirmed`
   finding has N independent confirmations beating the champion by `min_delta`
   with no active `harmful` finding, and writes an `operational` notice.
-- **Desk** is the OBSERVE graph state (ADR-004 Q1 / D-029): champion + top-k
-  active findings. Discarded approaches re-enter the desk on plateau, a
-  periodic cadence, a search-space condition change, or a human `rejuvenate`.
+- **Desk** is the OBSERVE graph state (ADR-004 Q1 / D-029 / D-031): champion +
+  top-k active findings. Mode is a config change: `minimal` (default) or
+  `rich_digest` (compact off-desk history). Discarded approaches re-enter the
+  desk on plateau, a periodic cadence, a search-space condition change, or a
+  human `rejuvenate`.
 - **Execution** is event-driven (ADR-004 Q2 / D-030): queued vs in-flight specs,
   `max_inflight` (default 2), and `result_ingested` wakes delivered once on
   OBSERVE. Sequential `drain_pending` remains for halt-safe convenience.

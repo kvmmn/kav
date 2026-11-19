@@ -21,8 +21,10 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
     """Build the tool whitelist bound to one project's memory."""
 
     def observe() -> str:
-        """OBSERVE node input: minimal desk plus operational overlays.
+        """OBSERVE node input: desk plus operational overlays.
 
+        Desk mode is a config change (D-031): `minimal` (default) is champion
+        + top-k + rejuvenated; `rich_digest` adds a compact off-desk history.
         Consumes event-driven wakes (D-030) so each result ingestion is
         delivered to the control plane once.
         """

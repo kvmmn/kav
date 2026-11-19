@@ -44,6 +44,7 @@ mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
 print("1. OBSERVE")
 state = __import__("json").loads(tools["observe"]())
 print("   champion:", state["champion"]["metric_value"], "| desk k:", state["desk"]["k"],
+      "| mode:", state["desk"]["mode"],
       "| findings:", len(state["active_findings"]),
       "| rejuvenated:", len(state["desk"]["rejuvenated"]))
 
@@ -86,6 +87,7 @@ print("   ", tools["promote"]({"lr": 0.02}, 0.024, "exp-walk001"))
 print("\n8. OBSERVE again — knowledge grew + wakes delivered:")
 state = __import__("json").loads(tools["observe"]())
 print("   champion:", state["champion"]["metric_value"], "| desk k:", state["desk"]["k"],
+      "| mode:", state["desk"]["mode"],
       "| findings:", len(state["active_findings"]),
       "| rejuvenated:", len(state["desk"]["rejuvenated"]),
       "| wakes:", [w["experiment_id"] for w in state["wakes"]],
@@ -94,6 +96,8 @@ print("   champion:", state["champion"]["metric_value"], "| desk k:", state["des
 assert state["champion"]["metric_value"] == 0.024
 assert len(state["active_findings"]) == 1
 assert state["desk"]["k"] == 10
+assert state["desk"]["mode"] == "minimal"
+assert "digest" not in state["desk"]
 assert state["desk"]["rejuvenated"] == []
 assert {w["experiment_id"] for w in state["wakes"]} == {"exp-walk001", "exp-walk002"}
 assert state["pending"] == []

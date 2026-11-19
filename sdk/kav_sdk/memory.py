@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS desk_policy (
     project_id TEXT PRIMARY KEY,
     k INTEGER NOT NULL DEFAULT 10,
     rejuvenation_every INTEGER NOT NULL DEFAULT 8,
-    plateau_window INTEGER NOT NULL DEFAULT 5
+    plateau_window INTEGER NOT NULL DEFAULT 5,
+    mode TEXT NOT NULL DEFAULT 'minimal'
 );
 CREATE TABLE IF NOT EXISTS rejuvenation_desk (
     project_id TEXT NOT NULL,
@@ -113,6 +114,10 @@ DEFAULT_CONFIRMATIONS = 2
 DEFAULT_DESK_K = 10
 DEFAULT_REJUVENATION_EVERY = 8
 DEFAULT_PLATEAU_WINDOW = 5
+DEFAULT_DIGEST_CAP = 30
+DESK_MINIMAL = "minimal"
+DESK_RICH_DIGEST = "rich_digest"
+_DESK_MODES = frozenset({DESK_MINIMAL, DESK_RICH_DIGEST})
 DEFAULT_MAX_INFLIGHT = 2
 WAKE_RESULT_INGESTED = "result_ingested"
 
@@ -128,6 +133,7 @@ class ProjectMemory:
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(_SCHEMA)
         self._migrate_experiments_started_at()
+        self._migrate_desk_policy_mode()
         self.conn.commit()
 
     def close(self) -> None:
@@ -482,7 +488,7 @@ class ProjectMemory:
     # -------------------------------------------------------------- desk (Q1)
     def get_desk_policy(self) -> dict[str, Any]:
         row = self.conn.execute(
-            "SELECT k, rejuvenation_every, plateau_window FROM desk_policy "
+            "SELECT k, rejuvenation_every, plateau_window, mode FROM desk_policy "
             "WHERE project_id=?",
             (self.project_id,),
         ).fetchone()
@@ -491,11 +497,14 @@ class ProjectMemory:
                 "k": DEFAULT_DESK_K,
                 "rejuvenation_every": DEFAULT_REJUVENATION_EVERY,
                 "plateau_window": DEFAULT_PLATEAU_WINDOW,
+                "mode": DESK_MINIMAL,
             }
+        stored_mode = row["mode"] if "mode" in row.keys() and row["mode"] else DESK_MINIMAL
         return {
             "k": int(row["k"]),
             "rejuvenation_every": int(row["rejuvenation_every"]),
             "plateau_window": int(row["plateau_window"]),
+            "mode": stored_mode,
         }
 
     def set_desk_policy(
@@ -503,6 +512,7 @@ class ProjectMemory:
         k: int = DEFAULT_DESK_K,
         rejuvenation_every: int = DEFAULT_REJUVENATION_EVERY,
         plateau_window: int = DEFAULT_PLATEAU_WINDOW,
+        mode: str | None = None,
     ) -> None:
         if k < 1:
             raise ValueError("k must be >= 1")
@@ -510,26 +520,76 @@ class ProjectMemory:
             raise ValueError("rejuvenation_every must be >= 1")
         if plateau_window < 1:
             raise ValueError("plateau_window must be >= 1")
+        if mode is None:
+            mode = self.get_desk_policy()["mode"]
+        if mode not in _DESK_MODES:
+            raise ValueError(f"unknown desk mode: {mode}")
         self.conn.execute(
             "INSERT OR REPLACE INTO desk_policy "
-            "(project_id, k, rejuvenation_every, plateau_window) VALUES (?, ?, ?, ?)",
-            (self.project_id, k, rejuvenation_every, plateau_window),
+            "(project_id, k, rejuvenation_every, plateau_window, mode) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (self.project_id, k, rejuvenation_every, plateau_window, mode),
         )
         self.conn.commit()
 
     def desk(self) -> dict[str, Any]:
-        """Minimal OBSERVE graph state: champion + top-k + rejuvenated (D-029)."""
+        """OBSERVE graph state: champion + top-k + rejuvenated (D-029).
+
+        `mode=minimal` (default) keeps graph state small. `mode=rich_digest`
+        is the same retrieval plus a compact off-desk history digest (D-031).
+        """
         policy = self.get_desk_policy()
         k = policy["k"]
+        mode = policy["mode"]
         active = self.active_findings(limit=k)
         rejuvenated = self.rejuvenated_findings()
         active_ids = {f.finding_id for f in active}
         extra = [f for f in rejuvenated if f.finding_id not in active_ids]
-        return {
+        payload: dict[str, Any] = {
             "champion": self.get_champion(),
             "findings": [f.model_dump(mode="json") for f in active],
             "rejuvenated": [f.model_dump(mode="json") for f in extra],
             "k": k,
+            "mode": mode,
+        }
+        if mode == DESK_RICH_DIGEST:
+            payload["digest"] = self.history_digest(exclude_ids=active_ids)
+        return payload
+
+    def history_digest(self, exclude_ids: set[str] | None = None) -> dict[str, Any]:
+        """Compact off-desk history for rich_digest mode (D-031). No schema change."""
+        exclude = exclude_ids or set()
+        rows = self.conn.execute(
+            "SELECT data, superseded_by, kind FROM findings WHERE project_id=?",
+            (self.project_id,),
+        ).fetchall()
+        by_kind: dict[str, int] = {}
+        superseded = 0
+        off: list[dict[str, Any]] = []
+        for r in rows:
+            finding = ResearchFinding.model_validate_json(r["data"])
+            kind = finding.kind.value
+            by_kind[kind] = by_kind.get(kind, 0) + 1
+            if r["superseded_by"]:
+                superseded += 1
+            if finding.finding_id in exclude:
+                continue
+            off.append({
+                "finding_id": finding.finding_id,
+                "kind": kind,
+                "statement": finding.statement,
+                "confidence": finding.confidence,
+                "tags": list(finding.tags),
+                "superseded": bool(r["superseded_by"]),
+            })
+        off.sort(key=lambda item: item["confidence"], reverse=True)
+        cap = max(self.get_desk_policy()["k"] * 3, DEFAULT_DIGEST_CAP)
+        return {
+            "total_findings": len(rows),
+            "by_kind": by_kind,
+            "superseded": superseded,
+            "off_desk": off[:cap],
+            "off_desk_truncated": max(0, len(off) - cap),
         }
 
     def discarded_findings(self, limit: int | None = None) -> list[ResearchFinding]:
@@ -832,6 +892,16 @@ class ProjectMemory:
         }
         if "started_at" not in cols:
             self.conn.execute("ALTER TABLE experiments ADD COLUMN started_at TEXT")
+
+    def _migrate_desk_policy_mode(self) -> None:
+        cols = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(desk_policy)").fetchall()
+        }
+        if cols and "mode" not in cols:
+            self.conn.execute(
+                "ALTER TABLE desk_policy ADD COLUMN mode TEXT NOT NULL DEFAULT 'minimal'"
+            )
 
     def _experiment_exists(self, eid: str) -> bool:
         return self.conn.execute(
