@@ -45,6 +45,7 @@ print("1. OBSERVE")
 state = __import__("json").loads(tools["observe"]())
 print("   champion:", state["champion"]["metric_value"], "| desk k:", state["desk"]["k"],
       "| mode:", state["desk"]["mode"],
+      "| promotion:", state["promotion_policy"]["mode"],
       "| findings:", len(state["active_findings"]),
       "| rejuvenated:", len(state["desk"]["rejuvenated"]))
 
@@ -99,6 +100,7 @@ assert state["desk"]["k"] == 10
 assert state["desk"]["mode"] == "minimal"
 assert "digest" not in state["desk"]
 assert state["desk"]["rejuvenated"] == []
+assert state["promotion_policy"]["mode"] == "manual"
 assert {w["experiment_id"] for w in state["wakes"]} == {"exp-walk001", "exp-walk002"}
 assert state["pending"] == []
 assert state["inflight"] == []

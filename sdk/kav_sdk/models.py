@@ -58,6 +58,13 @@ class EvaluatorDecl(BaseModel):
 
 
 @_strict
+class PolicyDecl(BaseModel):
+    """Owner-chosen V1 autonomy (ADR-004 Q2 / D-032). Declarations only."""
+
+    promotion: Literal["manual", "auto_guarded"] = "manual"
+
+
+@_strict
 class Constraints(BaseModel):
     max_budget_per_experiment: Budget
     forbidden_actions: list[str] = Field(default_factory=list)
@@ -80,6 +87,13 @@ class ProjectManifest(BaseModel):
     objective: Objective
     constraints: Constraints
     evaluator: EvaluatorDecl
+    policy: PolicyDecl | None = None
+
+    def promotion_mode(self) -> str:
+        """Manifest is the source of truth on attach; omitted policy is manual."""
+        if self.policy is None:
+            return "manual"
+        return self.policy.promotion
 
 
 # ------------------------------------------------------------ SearchSpace

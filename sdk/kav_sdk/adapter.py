@@ -103,7 +103,11 @@ class HostRunner:
         self._pool: ThreadPoolExecutor | None = None
 
     def attach(self) -> None:
-        """Copy host declarations into project memory (adapter's job, not the agent's)."""
+        """Copy host declarations into project memory (adapter's job, not the agent's).
+
+        `save_manifest` also seeds promotion_policy from optional
+        `manifest.policy.promotion` (D-032). Omitted policy is manual.
+        """
         self.memory.save_manifest(self.adapter.manifest())
         self.memory.save_search_space(self.adapter.search_space())
 

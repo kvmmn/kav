@@ -12,8 +12,9 @@ policy.
 **Status:** v0.1 — foundation + live cycle + Host Adapter v0.1 (in-process
 `HostAdapter` / `SimulatedHost` / `HostRunner`) + HTTP/OpenAPI projection of
 the four adapter operations + circuit-breaker **halt** (three similar consecutive
-failures stop the strategy and alert a human) + pluggable promotion (`manual`
-default; `auto_guarded` when N independent confirmations beat the champion) +
+failures stop the strategy and alert a human) + pluggable promotion chosen per
+project via the host manifest (`policy.promotion`: `manual` default;
+`auto_guarded` when N independent confirmations beat the champion) +
 **minimal desk** (champion + top-k) with deliberate **rejuvenation** of discarded
 approaches + **rich-history digest** as a desk config (`minimal` default;
 `rich_digest` adds compact off-desk history) + **event-driven wake** (issue
@@ -53,7 +54,7 @@ Hypothesis → Bounded Experiment → Trusted Evidence → Memory → Better Hyp
 | Execute | Host (adapter) | Runs experiment; KAV never touches the evaluator |
 | Ingest | Host → KAV | `ExperimentResult` — measurement as reported, failures included |
 | Distill | KAV | `ResearchFinding` — durable knowledge with lineage |
-| Promote | Policy (V1) | `manual` (default, human `promote` tool) or `auto_guarded` (D-028) |
+| Promote | Policy (V1) | Host manifest `policy.promotion`: `manual` (default, human `promote` tool) or `auto_guarded` (D-028 / D-032) |
 
 See [docs/architecture.md](docs/architecture.md) for control-plane vs.
 execution-plane separation and adapter operations.
@@ -81,7 +82,7 @@ KAV attaches to a host through four operations defined in [contracts/](contracts
 
 | Operation | Schema | Purpose |
 |-----------|--------|---------|
-| Register manifest | `project-manifest.schema.json` | Objective, constraints, evaluator ownership |
+| Register manifest | `project-manifest.schema.json` | Objective, constraints, evaluator ownership, optional promotion policy |
 | Declare search space | `search-space.schema.json` | Bounded, typed parameters and defaults |
 | Issue experiment | `experiment-spec.schema.json` | Single-change, budgeted, reproducible spec |
 | Report result | `experiment-result.schema.json` | Host-reported measurement and artifacts |

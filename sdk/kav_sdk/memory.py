@@ -147,6 +147,20 @@ class ProjectMemory:
             (m.project_id, m.model_dump_json()),
         )
         self.conn.commit()
+        self.apply_manifest_policy(m)
+
+    def apply_manifest_policy(self, m: ProjectManifest) -> None:
+        """Seed promotion mode from the host declaration (D-032).
+
+        Manifest is the source of truth on attach. Omitted `policy` is `manual`.
+        `min_delta` / `confirmations` stay project-local tunables.
+        """
+        current = self.get_promotion_policy()
+        self.set_promotion_policy(
+            mode=m.promotion_mode(),
+            min_delta=current["min_delta"],
+            confirmations=current["confirmations"],
+        )
 
     def get_manifest(self) -> ProjectManifest | None:
         row = self.conn.execute(

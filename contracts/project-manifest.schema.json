@@ -88,6 +88,17 @@
           "description": "Documentation of how measurement works, for hypothesis quality. Informational only."
         }
       }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Owner-chosen V1 autonomy (ADR-004 Q2 / D-032). Omitted = manual. Declarations only — no evaluator access.",
+      "properties": {
+        "promotion": {
+          "enum": ["manual", "auto_guarded"],
+          "description": "Graduated autonomy. Default manual if omitted. auto_guarded uses the same D-028 gates. min_delta and confirmations stay project-local tunables."
+        }
+      }
     }
   }
 }

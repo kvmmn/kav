@@ -3,10 +3,13 @@ import pytest
 
 from kav_sdk import (
     Budget, Change, Constraints, Domain, EvaluatorDecl, ExperimentResult,
-    ExperimentSpec, Evidence, FindingKind, Objective, Parameter,
+    ExperimentSpec, Evidence, FindingKind, Objective, Parameter, PolicyDecl,
     ProjectManifest, ResearchFinding, SearchSpace,
 )
-from kav_sdk.memory import DESK_MINIMAL, DESK_RICH_DIGEST, ProjectMemory
+from kav_sdk.memory import (
+    DESK_MINIMAL, DESK_RICH_DIGEST, PROMOTION_AUTO_GUARDED, PROMOTION_MANUAL,
+    ProjectMemory,
+)
 
 
 @pytest.fixture()
@@ -386,6 +389,35 @@ def test_human_promote_still_works_in_auto_guarded(mem):
     out = tools["promote"]({"lr": 0.02}, 0.024, "exp-human01")
     assert out.startswith("PROMOTED")
     assert mem.get_champion()["metric_value"] == 0.024
+
+
+def test_save_manifest_without_policy_seeds_manual(mem):
+    mem.save_manifest(manifest())
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_MANUAL
+
+
+def test_save_manifest_auto_guarded_seeds_policy(mem):
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_save_manifest_preserves_local_thresholds(mem):
+    mem.set_promotion_policy(PROMOTION_MANUAL, min_delta=0.01, confirmations=3)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    policy = mem.get_promotion_policy()
+    assert policy["mode"] == PROMOTION_AUTO_GUARDED
+    assert policy["min_delta"] == 0.01
+    assert policy["confirmations"] == 3
+
+
+def test_save_manifest_omitted_policy_reverts_to_manual(mem):
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED)
+    mem.save_manifest(manifest())
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_MANUAL
 
 
 def test_observe_includes_promotion_policy(mem):

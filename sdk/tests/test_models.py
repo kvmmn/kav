@@ -4,9 +4,9 @@ from pydantic import ValidationError
 
 from kav_sdk import (
     Budget, Change, Constraints, Domain, EvaluatorDecl, ExperimentResult,
-    ExperimentSpec, FindingKind, Objective, Parameter, ProjectManifest,
-    Reproducibility, ResearchFinding, ResultStatus, SearchSpace,
-    validate_spec_against_project, SpecValidationError,
+    ExperimentSpec, FindingKind, Objective, Parameter, PolicyDecl,
+    ProjectManifest, Reproducibility, ResearchFinding, ResultStatus,
+    SearchSpace, validate_spec_against_project, SpecValidationError,
 )
 
 
@@ -125,3 +125,25 @@ def test_budget_covers_logic():
     assert big.covers(small)
     assert not small.covers(big)
     assert not unlimited.covers(small)  # None cannot cover a concrete limit
+
+
+# ---- graduated autonomy via manifest (D-032)
+def test_omitted_policy_is_manual():
+    m = manifest()
+    assert m.policy is None
+    assert m.promotion_mode() == "manual"
+
+
+def test_policy_promotion_auto_guarded():
+    m = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m.promotion_mode() == "auto_guarded"
+
+
+def test_empty_policy_object_defaults_manual():
+    m = manifest(policy=PolicyDecl())
+    assert m.promotion_mode() == "manual"
+
+
+def test_unknown_promotion_mode_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"promotion": "full_auto"})

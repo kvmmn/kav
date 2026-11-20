@@ -5,10 +5,11 @@ import pytest
 
 from kav_sdk import (
     Budget, Change, Constraints, Domain, EvaluatorDecl, ExperimentResult,
-    ExperimentSpec, Evidence, Objective, Parameter, ProjectManifest, SearchSpace,
+    ExperimentSpec, Evidence, Objective, Parameter, PolicyDecl, ProjectManifest,
+    SearchSpace,
 )
 from kav_sdk.adapter import HostAdapter, HostRunner, SimulatedHost
-from kav_sdk.memory import ProjectMemory
+from kav_sdk.memory import PROMOTION_AUTO_GUARDED, PROMOTION_MANUAL, ProjectMemory
 from kav_sdk.tools import make_kav_tools
 
 
@@ -61,6 +62,19 @@ def test_attach_writes_manifest_and_space(mem):
     runner.attach()
     assert mem.get_manifest().name == "Demo"
     assert mem.get_search_space().defaults == {"lr": 0.01}
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_MANUAL
+
+
+def test_attach_seeds_auto_guarded_from_manifest(mem):
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(promotion="auto_guarded")}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    assert mem.get_manifest().promotion_mode() == PROMOTION_AUTO_GUARDED
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
 
 
 def test_drain_pending_is_noop_when_empty(mem):
