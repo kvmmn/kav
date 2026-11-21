@@ -59,9 +59,11 @@ class EvaluatorDecl(BaseModel):
 
 @_strict
 class PolicyDecl(BaseModel):
-    """Owner-chosen V1 autonomy (ADR-004 Q2 / D-032). Declarations only."""
+    """Owner-chosen V1 autonomy (ADR-004 Q2 / D-032 / D-033). Declarations only."""
 
     promotion: Literal["manual", "auto_guarded"] = "manual"
+    min_delta: float | None = Field(default=None, ge=0)
+    confirmations: int | None = Field(default=None, ge=1)
 
 
 @_strict
@@ -94,6 +96,18 @@ class ProjectManifest(BaseModel):
         if self.policy is None:
             return "manual"
         return self.policy.promotion
+
+    def promotion_min_delta(self) -> float | None:
+        """Declared threshold, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.min_delta
+
+    def promotion_confirmations(self) -> int | None:
+        """Declared confirmation count, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.confirmations
 
 
 # ------------------------------------------------------------ SearchSpace

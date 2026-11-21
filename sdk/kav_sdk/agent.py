@@ -41,11 +41,13 @@ YOUR LOOP:
 - After results arrive (ingest_result by the runner), analyze and record_finding()
   with kind confirmed/refuted/harmful/inconclusive/operational and full lineage.
 - If evidence beats the champion: promotion mode comes from the host manifest
-  (`policy.promotion`, D-032; omitted = manual). In manual mode propose
-  promotion via the promote tool after human approval. In auto_guarded mode, a
-  confirmed finding may auto-promote when N independent confirmations beat the
-  champion by min_delta with no harmful findings; an operational finding is the
-  human notification. The promote tool remains a human override.
+  (`policy.promotion`, D-032; omitted = manual). Optional `policy.min_delta`
+  and `policy.confirmations` (D-033) seed the auto_guarded gates; omitted
+  fields keep project-local tunables. In manual mode propose promotion via the
+  promote tool after human approval. In auto_guarded mode, a confirmed finding
+  may auto-promote when N independent confirmations beat the champion by
+  min_delta with no harmful findings; an operational finding is the human
+  notification. The promote tool remains a human override.
 - When the desk shows rejuvenated findings (plateau, periodic, or new search-space
   parameters), consider re-testing those discarded approaches rather than treating
   them as permanently buried. A human may also call rejuvenate() to force this.

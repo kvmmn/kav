@@ -100,9 +100,10 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
     def record_finding(finding_json: str) -> str:
         """DISTILL node: write an immutable finding with lineage.
 
-        In auto_guarded mode (D-028 / D-032), a confirmed finding may promote
-        the champion when independent-confirmation gates pass. Mode is seeded
-        from the host manifest on attach.
+        In auto_guarded mode (D-028 / D-032 / D-033), a confirmed finding may
+        promote the champion when independent-confirmation gates pass. Mode and
+        optional min_delta / confirmations are seeded from the host manifest
+        on attach.
         """
         f = ResearchFinding.model_validate_json(finding_json)
         memory.save_finding(f)

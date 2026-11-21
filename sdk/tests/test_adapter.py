@@ -77,6 +77,22 @@ def test_attach_seeds_auto_guarded_from_manifest(mem):
     assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
 
 
+def test_attach_seeds_declared_thresholds(mem):
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(
+            promotion="auto_guarded", min_delta=0.05, confirmations=4,
+        )}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    policy = mem.get_promotion_policy()
+    assert policy["mode"] == PROMOTION_AUTO_GUARDED
+    assert policy["min_delta"] == 0.05
+    assert policy["confirmations"] == 4
+
+
 def test_drain_pending_is_noop_when_empty(mem):
     runner = HostRunner(mem, SimulatedHost(manifest(), space(), true_metric))
     runner.attach()

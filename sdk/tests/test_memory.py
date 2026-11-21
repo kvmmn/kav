@@ -420,6 +420,39 @@ def test_save_manifest_omitted_policy_reverts_to_manual(mem):
     assert mem.get_promotion_policy()["mode"] == PROMOTION_MANUAL
 
 
+def test_save_manifest_seeds_declared_thresholds(mem):
+    mem.set_promotion_policy(PROMOTION_MANUAL, min_delta=0.01, confirmations=3)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(
+            promotion="auto_guarded", min_delta=0.05, confirmations=4,
+        )}
+    ))
+    policy = mem.get_promotion_policy()
+    assert policy["mode"] == PROMOTION_AUTO_GUARDED
+    assert policy["min_delta"] == 0.05
+    assert policy["confirmations"] == 4
+
+
+def test_save_manifest_partial_threshold_keeps_other_local(mem):
+    mem.set_promotion_policy(PROMOTION_MANUAL, min_delta=0.01, confirmations=3)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded", min_delta=0.02)}
+    ))
+    policy = mem.get_promotion_policy()
+    assert policy["mode"] == PROMOTION_AUTO_GUARDED
+    assert policy["min_delta"] == 0.02
+    assert policy["confirmations"] == 3
+
+
+def test_save_manifest_omitted_policy_keeps_local_thresholds(mem):
+    mem.set_promotion_policy(PROMOTION_AUTO_GUARDED, min_delta=0.01, confirmations=3)
+    mem.save_manifest(manifest())
+    policy = mem.get_promotion_policy()
+    assert policy["mode"] == PROMOTION_MANUAL
+    assert policy["min_delta"] == 0.01
+    assert policy["confirmations"] == 3
+
+
 def test_observe_includes_promotion_policy(mem):
     from kav_sdk.memory import PROMOTION_AUTO_GUARDED
     from kav_sdk.tools import make_kav_tools

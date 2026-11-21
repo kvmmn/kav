@@ -120,7 +120,7 @@ in [adr/ADR-004-research-loop-policies.md](adr/ADR-004-research-loop-policies.md
 
 The adapter surface is fixed at four host-facing operations (decision D-009):
 
-1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032)
+1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033)
 2. **Search space** — finite typed domains per parameter; defaults for deltas
 3. **Run experiment** — host receives a validated `ExperimentSpec`
 4. **Report result** — host returns `ExperimentResult` (including failures)
@@ -149,13 +149,15 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
 - **Consecutive failure** tracking feeds a circuit breaker (ADR-004). Three
   consecutive failures of structurally similar specs halt the strategy and
   write an `operational` finding as the human alert (D-027). Resume is human-gated.
-- **Promotion policy** is pluggable (ADR-004 Q2 / D-028 / D-032): the host
-  chooses per project via optional `policy.promotion` on the manifest (`manual`
-  default if omitted, or `auto_guarded`). Attach seeds project-local mode from
-  that declaration. `manual` requires the human `promote` tool; `auto_guarded`
-  promotes when a `confirmed` finding has N independent confirmations beating
-  the champion by `min_delta` with no active `harmful` finding, and writes an
-  `operational` notice. `min_delta` / `confirmations` stay project-local.
+- **Promotion policy** is pluggable (ADR-004 Q2 / D-028 / D-032 / D-033): the
+  host chooses per project via optional `policy.promotion` on the manifest
+  (`manual` default if omitted, or `auto_guarded`) and optional
+  `policy.min_delta` / `policy.confirmations`. Attach seeds project-local
+  policy from those declarations; omitted tunables keep local values
+  (defaults 0 and 2). `manual` requires the human `promote` tool;
+  `auto_guarded` promotes when a `confirmed` finding has N independent
+  confirmations beating the champion by `min_delta` with no active `harmful`
+  finding, and writes an `operational` notice.
 - **Desk** is the OBSERVE graph state (ADR-004 Q1 / D-029 / D-031): champion +
   top-k active findings. Mode is a config change: `minimal` (default) or
   `rich_digest` (compact off-desk history). Discarded approaches re-enter the

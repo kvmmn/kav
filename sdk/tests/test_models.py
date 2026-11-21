@@ -147,3 +147,35 @@ def test_empty_policy_object_defaults_manual():
 def test_unknown_promotion_mode_rejected():
     with pytest.raises(ValidationError):
         manifest(policy={"promotion": "full_auto"})
+
+
+def test_policy_thresholds_optional():
+    m = manifest(policy=PolicyDecl(
+        promotion="auto_guarded", min_delta=0.05, confirmations=4,
+    ))
+    assert m.promotion_min_delta() == 0.05
+    assert m.promotion_confirmations() == 4
+
+
+def test_omitted_thresholds_are_none():
+    m = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m.promotion_min_delta() is None
+    assert m.promotion_confirmations() is None
+    m2 = manifest()
+    assert m2.promotion_min_delta() is None
+    assert m2.promotion_confirmations() is None
+
+
+def test_zero_min_delta_is_declared():
+    m = manifest(policy=PolicyDecl(min_delta=0))
+    assert m.promotion_min_delta() == 0
+
+
+def test_negative_min_delta_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"min_delta": -0.01})
+
+
+def test_confirmations_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"confirmations": 0})

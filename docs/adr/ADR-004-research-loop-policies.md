@@ -19,9 +19,10 @@ Implemented as D-031: `desk_policy.mode` `minimal` (default) or `rich_digest`.
   - `auto_guarded`: auto-promote only when improvement exceeds threshold on N
     independent confirmations AND no forbidden-action violations; human notified.
   Long-run goal: graduated autonomy — the owner chooses per project via manifest/policy.
-  Implemented as D-032: optional `policy.promotion` on ProjectManifest
-  (`manual` default if omitted, or `auto_guarded`); attach seeds project-local
-  promotion_policy from that declaration.
+  Implemented as D-032 + D-033: optional `policy.promotion` on ProjectManifest
+  (`manual` default if omitted, or `auto_guarded`) plus optional `min_delta` /
+  `confirmations`; attach seeds project-local promotion_policy from those
+  declarations. Omitted tunables keep local values.
 
 ## Q3 — Failures: finding-always + circuit-breaker
 - Every failed/timeout/rejected run routes through normal analysis and distills

@@ -92,11 +92,21 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Owner-chosen V1 autonomy (ADR-004 Q2 / D-032). Omitted = manual. Declarations only — no evaluator access.",
+      "description": "Owner-chosen V1 autonomy (ADR-004 Q2 / D-032 / D-033). Omitted = manual with local tunables. Declarations only — no evaluator access.",
       "properties": {
         "promotion": {
           "enum": ["manual", "auto_guarded"],
-          "description": "Graduated autonomy. Default manual if omitted. auto_guarded uses the same D-028 gates. min_delta and confirmations stay project-local tunables."
+          "description": "Graduated autonomy. Default manual if omitted. auto_guarded uses the same D-028 gates."
+        },
+        "min_delta": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Optional auto_guarded improvement threshold vs the current champion. Omitted keeps the project-local tunable (default 0)."
+        },
+        "confirmations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional auto_guarded independent-confirmation count. Omitted keeps the project-local tunable (default 2)."
         }
       }
     }

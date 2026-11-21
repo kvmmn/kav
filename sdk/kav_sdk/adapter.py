@@ -106,7 +106,8 @@ class HostRunner:
         """Copy host declarations into project memory (adapter's job, not the agent's).
 
         `save_manifest` also seeds promotion_policy from optional
-        `manifest.policy.promotion` (D-032). Omitted policy is manual.
+        `manifest.policy` (D-032 / D-033). Omitted policy is manual; omitted
+        `min_delta` / `confirmations` keep project-local tunables.
         """
         self.memory.save_manifest(self.adapter.manifest())
         self.memory.save_search_space(self.adapter.search_space())
