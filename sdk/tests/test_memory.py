@@ -453,6 +453,37 @@ def test_save_manifest_omitted_policy_keeps_local_thresholds(mem):
     assert policy["confirmations"] == 3
 
 
+def test_save_manifest_seeds_declared_desk(mem):
+    mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_MINIMAL)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(desk="rich_digest")}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert desk["k"] == 4
+    assert desk["rejuvenation_every"] == 3
+    assert desk["plateau_window"] == 6
+
+
+def test_save_manifest_omitted_desk_keeps_local(mem):
+    mem.set_desk_policy(k=4, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert desk["k"] == 4
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_save_manifest_omitted_policy_keeps_local_desk(mem):
+    mem.set_desk_policy(k=4, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest())
+    desk = mem.get_desk_policy()
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert desk["k"] == 4
+
+
 def test_observe_includes_promotion_policy(mem):
     from kav_sdk.memory import PROMOTION_AUTO_GUARDED
     from kav_sdk.tools import make_kav_tools

@@ -150,11 +150,13 @@ class ProjectMemory:
         self.apply_manifest_policy(m)
 
     def apply_manifest_policy(self, m: ProjectManifest) -> None:
-        """Seed promotion policy from the host declaration (D-032 / D-033).
+        """Seed promotion and desk policy from the host declaration (D-032–D-034).
 
         Manifest is the source of truth on attach. Omitted `policy` is `manual`.
         Declared `min_delta` / `confirmations` seed local tunables; omitted
         fields keep the current project-local values (defaults 0 and 2).
+        Declared `desk` seeds `desk_policy.mode`; omitted keeps local
+        (default `minimal`). k / rejuvenation_every / plateau_window stay local.
         """
         current = self.get_promotion_policy()
         min_delta = m.promotion_min_delta()
@@ -166,6 +168,15 @@ class ProjectMemory:
                 current["confirmations"] if confirmations is None else confirmations
             ),
         )
+        desk_mode = m.desk_mode()
+        if desk_mode is not None:
+            desk = self.get_desk_policy()
+            self.set_desk_policy(
+                k=desk["k"],
+                rejuvenation_every=desk["rejuvenation_every"],
+                plateau_window=desk["plateau_window"],
+                mode=desk_mode,
+            )
 
     def get_manifest(self) -> ProjectManifest | None:
         row = self.conn.execute(

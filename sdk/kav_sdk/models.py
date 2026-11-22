@@ -59,11 +59,12 @@ class EvaluatorDecl(BaseModel):
 
 @_strict
 class PolicyDecl(BaseModel):
-    """Owner-chosen V1 autonomy (ADR-004 Q2 / D-032 / D-033). Declarations only."""
+    """Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034). Declarations only."""
 
     promotion: Literal["manual", "auto_guarded"] = "manual"
     min_delta: float | None = Field(default=None, ge=0)
     confirmations: int | None = Field(default=None, ge=1)
+    desk: Literal["minimal", "rich_digest"] | None = None
 
 
 @_strict
@@ -108,6 +109,12 @@ class ProjectManifest(BaseModel):
         if self.policy is None:
             return None
         return self.policy.confirmations
+
+    def desk_mode(self) -> str | None:
+        """Declared desk mode, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.desk
 
 
 # ------------------------------------------------------------ SearchSpace

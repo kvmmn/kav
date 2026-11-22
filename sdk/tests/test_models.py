@@ -179,3 +179,26 @@ def test_negative_min_delta_rejected():
 def test_confirmations_below_one_rejected():
     with pytest.raises(ValidationError):
         manifest(policy={"confirmations": 0})
+
+
+# ---- desk mode via manifest (D-034)
+def test_omitted_desk_is_none():
+    m = manifest()
+    assert m.desk_mode() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.desk_mode() is None
+
+
+def test_policy_desk_rich_digest():
+    m = manifest(policy=PolicyDecl(desk="rich_digest"))
+    assert m.desk_mode() == "rich_digest"
+
+
+def test_policy_desk_minimal():
+    m = manifest(policy=PolicyDecl(desk="minimal"))
+    assert m.desk_mode() == "minimal"
+
+
+def test_unknown_desk_mode_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"desk": "verbose"})

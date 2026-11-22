@@ -23,8 +23,9 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
     def observe() -> str:
         """OBSERVE node input: desk plus operational overlays.
 
-        Desk mode is a config change (D-031): `minimal` (default) is champion
-        + top-k + rejuvenated; `rich_digest` adds a compact off-desk history.
+        Desk mode is a config change (D-031 / D-034): `minimal` (default) is
+        champion + top-k + rejuvenated; `rich_digest` adds a compact off-desk
+        history. Optional `policy.desk` on the host manifest seeds the mode.
         Consumes event-driven wakes (D-030) so each result ingestion is
         delivered to the control plane once.
         """

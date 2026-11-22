@@ -18,7 +18,8 @@ project via the host manifest (`policy.promotion`: `manual` default;
 `min_delta` / `confirmations`) +
 **minimal desk** (champion + top-k) with deliberate **rejuvenation** of discarded
 approaches + **rich-history digest** as a desk config (`minimal` default;
-`rich_digest` adds compact off-desk history) + **event-driven wake** (issue
+`rich_digest` adds compact off-desk history; optional `policy.desk` on the
+host manifest) + **event-driven wake** (issue
 further hypotheses while the host runs; OBSERVE consumes `result_ingested`
 wakes). Contracts, SDK, memory, and the deterministic research cycle are
 implemented; live LLM-driven cycles remain experimental.
@@ -83,7 +84,7 @@ KAV attaches to a host through four operations defined in [contracts/](contracts
 
 | Operation | Schema | Purpose |
 |-----------|--------|---------|
-| Register manifest | `project-manifest.schema.json` | Objective, constraints, evaluator ownership, optional promotion policy and thresholds |
+| Register manifest | `project-manifest.schema.json` | Objective, constraints, evaluator ownership, optional promotion policy, thresholds, and desk mode |
 | Declare search space | `search-space.schema.json` | Bounded, typed parameters and defaults |
 | Issue experiment | `experiment-spec.schema.json` | Single-change, budgeted, reproducible spec |
 | Report result | `experiment-result.schema.json` | Host-reported measurement and artifacts |

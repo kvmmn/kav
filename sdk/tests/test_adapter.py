@@ -9,7 +9,10 @@ from kav_sdk import (
     SearchSpace,
 )
 from kav_sdk.adapter import HostAdapter, HostRunner, SimulatedHost
-from kav_sdk.memory import PROMOTION_AUTO_GUARDED, PROMOTION_MANUAL, ProjectMemory
+from kav_sdk.memory import (
+    DESK_MINIMAL, DESK_RICH_DIGEST, PROMOTION_AUTO_GUARDED, PROMOTION_MANUAL,
+    ProjectMemory,
+)
 from kav_sdk.tools import make_kav_tools
 
 
@@ -91,6 +94,35 @@ def test_attach_seeds_declared_thresholds(mem):
     assert policy["mode"] == PROMOTION_AUTO_GUARDED
     assert policy["min_delta"] == 0.05
     assert policy["confirmations"] == 4
+
+
+def test_attach_seeds_declared_desk(mem):
+    mem.set_desk_policy(k=4, mode=DESK_MINIMAL)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(desk="rich_digest")}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    desk = mem.get_desk_policy()
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert desk["k"] == 4
+
+
+def test_attach_omitted_desk_keeps_local(mem):
+    mem.set_desk_policy(k=4, mode=DESK_RICH_DIGEST)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(promotion="auto_guarded")}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    desk = mem.get_desk_policy()
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert desk["k"] == 4
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
 
 
 def test_drain_pending_is_noop_when_empty(mem):
