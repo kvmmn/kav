@@ -16,6 +16,9 @@ attach seeds project-local desk_policy.mode; omitted keeps local values.
 - After DESIGN, KAV continues working on other hypotheses while the host executes
   asynchronously. The loop is event-driven (wakes on result ingestion).
   Implemented as D-030 (`dispatch_pending` / `collect_finished` / OBSERVE wakes).
+  Owner-chosen per project via optional `policy.max_inflight` on ProjectManifest
+  (D-035); attach seeds project-local `execution_policy.max_inflight`; omitted
+  keeps local values (default 2).
 - Promotion policy is a **pluggable component** with two V1 modes:
   - `manual` (default): every promotion requires human approval.
   - `auto_guarded`: auto-promote only when improvement exceeds threshold on N

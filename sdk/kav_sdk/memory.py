@@ -150,13 +150,15 @@ class ProjectMemory:
         self.apply_manifest_policy(m)
 
     def apply_manifest_policy(self, m: ProjectManifest) -> None:
-        """Seed promotion and desk policy from the host declaration (D-032–D-034).
+        """Seed promotion, desk, and execution policy from the host (D-032–D-035).
 
         Manifest is the source of truth on attach. Omitted `policy` is `manual`.
         Declared `min_delta` / `confirmations` seed local tunables; omitted
         fields keep the current project-local values (defaults 0 and 2).
         Declared `desk` seeds `desk_policy.mode`; omitted keeps local
         (default `minimal`). k / rejuvenation_every / plateau_window stay local.
+        Declared `max_inflight` seeds `execution_policy`; omitted keeps local
+        (default 2).
         """
         current = self.get_promotion_policy()
         min_delta = m.promotion_min_delta()
@@ -177,6 +179,9 @@ class ProjectMemory:
                 plateau_window=desk["plateau_window"],
                 mode=desk_mode,
             )
+        max_inflight = m.execution_max_inflight()
+        if max_inflight is not None:
+            self.set_execution_policy(max_inflight=max_inflight)
 
     def get_manifest(self) -> ProjectManifest | None:
         row = self.conn.execute(

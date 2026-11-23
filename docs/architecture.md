@@ -120,7 +120,7 @@ in [adr/ADR-004-research-loop-policies.md](adr/ADR-004-research-loop-policies.md
 
 The adapter surface is fixed at four host-facing operations (decision D-009):
 
-1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033) and optional `policy.desk` (`minimal` / `rich_digest`; D-034)
+1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033), optional `policy.desk` (`minimal` / `rich_digest`; D-034), and optional `policy.max_inflight` (≥ 1; D-035)
 2. **Search space** — finite typed domains per parameter; defaults for deltas
 3. **Run experiment** — host receives a validated `ExperimentSpec`
 4. **Report result** — host returns `ExperimentResult` (including failures)
@@ -165,9 +165,12 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
   project-local `desk_policy.mode`; omitted keeps the local value. Discarded
   approaches re-enter the desk on plateau, a periodic cadence, a search-space
   condition change, or a human `rejuvenate`.
-- **Execution** is event-driven (ADR-004 Q2 / D-030): queued vs in-flight specs,
-  `max_inflight` (default 2), and `result_ingested` wakes delivered once on
-  OBSERVE. Sequential `drain_pending` remains for halt-safe convenience.
+- **Execution** is event-driven (ADR-004 Q2 / D-030 / D-035): queued vs
+  in-flight specs, `max_inflight` (default 2), and `result_ingested` wakes
+  delivered once on OBSERVE. The host chooses the cap per project via optional
+  `policy.max_inflight` on the manifest; attach seeds project-local
+  `execution_policy.max_inflight`; omitted keeps the local value. Sequential
+  `drain_pending` remains for halt-safe convenience.
 - No cross-project reads or writes in v0.1
 
 The data model is tagged for a future optional shared-prior layer, but sharing

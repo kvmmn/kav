@@ -92,7 +92,7 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
+      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
       "properties": {
         "promotion": {
           "enum": ["manual", "auto_guarded"],
@@ -111,6 +111,11 @@
         "desk": {
           "enum": ["minimal", "rich_digest"],
           "description": "Optional OBSERVE desk mode (ADR-004 Q1 / D-031). Omitted keeps the project-local tunable (default minimal)."
+        },
+        "max_inflight": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional parallel host-run cap (ADR-004 Q2 / D-030). Omitted keeps the project-local tunable (default 2)."
         }
       }
     }

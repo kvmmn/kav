@@ -103,6 +103,7 @@ assert state["desk"]["rejuvenated"] == []
 assert state["promotion_policy"]["mode"] == "manual"
 assert state["promotion_policy"]["min_delta"] == 0
 assert state["promotion_policy"]["confirmations"] == 2
+assert state["execution_policy"]["max_inflight"] == 2
 assert {w["experiment_id"] for w in state["wakes"]} == {"exp-walk001", "exp-walk002"}
 assert state["pending"] == []
 assert state["inflight"] == []

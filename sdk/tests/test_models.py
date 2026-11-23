@@ -202,3 +202,21 @@ def test_policy_desk_minimal():
 def test_unknown_desk_mode_rejected():
     with pytest.raises(ValidationError):
         manifest(policy={"desk": "verbose"})
+
+
+# ---- max_inflight via manifest (D-035)
+def test_omitted_max_inflight_is_none():
+    m = manifest()
+    assert m.execution_max_inflight() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.execution_max_inflight() is None
+
+
+def test_policy_max_inflight_declared():
+    m = manifest(policy=PolicyDecl(max_inflight=4))
+    assert m.execution_max_inflight() == 4
+
+
+def test_max_inflight_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"max_inflight": 0})

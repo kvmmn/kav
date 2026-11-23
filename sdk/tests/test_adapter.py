@@ -125,6 +125,31 @@ def test_attach_omitted_desk_keeps_local(mem):
     assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
 
 
+def test_attach_seeds_declared_max_inflight(mem):
+    mem.set_execution_policy(max_inflight=3)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(max_inflight=4)}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    assert mem.get_execution_policy()["max_inflight"] == 4
+
+
+def test_attach_omitted_max_inflight_keeps_local(mem):
+    mem.set_execution_policy(max_inflight=3)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(promotion="auto_guarded")}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    assert mem.get_execution_policy()["max_inflight"] == 3
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
 def test_drain_pending_is_noop_when_empty(mem):
     runner = HostRunner(mem, SimulatedHost(manifest(), space(), true_metric))
     runner.attach()

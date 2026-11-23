@@ -484,6 +484,29 @@ def test_save_manifest_omitted_policy_keeps_local_desk(mem):
     assert desk["k"] == 4
 
 
+def test_save_manifest_seeds_declared_max_inflight(mem):
+    mem.set_execution_policy(max_inflight=3)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(max_inflight=4)}
+    ))
+    assert mem.get_execution_policy()["max_inflight"] == 4
+
+
+def test_save_manifest_omitted_max_inflight_keeps_local(mem):
+    mem.set_execution_policy(max_inflight=3)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    assert mem.get_execution_policy()["max_inflight"] == 3
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_save_manifest_omitted_policy_keeps_local_max_inflight(mem):
+    mem.set_execution_policy(max_inflight=3)
+    mem.save_manifest(manifest())
+    assert mem.get_execution_policy()["max_inflight"] == 3
+
+
 def test_observe_includes_promotion_policy(mem):
     from kav_sdk.memory import PROMOTION_AUTO_GUARDED
     from kav_sdk.tools import make_kav_tools
