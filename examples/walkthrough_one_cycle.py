@@ -98,6 +98,9 @@ assert state["champion"]["metric_value"] == 0.024
 assert len(state["active_findings"]) == 1
 assert state["desk"]["k"] == 10
 assert state["desk"]["mode"] == "minimal"
+assert state["desk_policy"]["k"] == 10
+assert state["desk_policy"]["rejuvenation_every"] == 8
+assert state["desk_policy"]["plateau_window"] == 5
 assert "digest" not in state["desk"]
 assert state["desk"]["rejuvenated"] == []
 assert state["promotion_policy"]["mode"] == "manual"

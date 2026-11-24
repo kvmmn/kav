@@ -220,3 +220,37 @@ def test_policy_max_inflight_declared():
 def test_max_inflight_below_one_rejected():
     with pytest.raises(ValidationError):
         manifest(policy={"max_inflight": 0})
+
+
+# ---- desk tunables via manifest (D-036)
+def test_omitted_desk_tunables_are_none():
+    m = manifest()
+    assert m.desk_k() is None
+    assert m.desk_rejuvenation_every() is None
+    assert m.desk_plateau_window() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.desk_k() is None
+    assert m2.desk_rejuvenation_every() is None
+    assert m2.desk_plateau_window() is None
+
+
+def test_policy_desk_tunables_declared():
+    m = manifest(policy=PolicyDecl(k=5, rejuvenation_every=3, plateau_window=4))
+    assert m.desk_k() == 5
+    assert m.desk_rejuvenation_every() == 3
+    assert m.desk_plateau_window() == 4
+
+
+def test_desk_k_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"k": 0})
+
+
+def test_rejuvenation_every_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"rejuvenation_every": 0})
+
+
+def test_plateau_window_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"plateau_window": 0})

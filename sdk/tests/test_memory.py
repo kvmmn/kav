@@ -507,6 +507,53 @@ def test_save_manifest_omitted_policy_keeps_local_max_inflight(mem):
     assert mem.get_execution_policy()["max_inflight"] == 3
 
 
+def test_save_manifest_seeds_declared_desk_tunables(mem):
+    mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(k=5, rejuvenation_every=2, plateau_window=4)}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["k"] == 5
+    assert desk["rejuvenation_every"] == 2
+    assert desk["plateau_window"] == 4
+    assert desk["mode"] == DESK_RICH_DIGEST
+
+
+def test_save_manifest_partial_desk_tunable_keeps_other_local(mem):
+    mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(k=7)}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["k"] == 7
+    assert desk["rejuvenation_every"] == 3
+    assert desk["plateau_window"] == 6
+    assert desk["mode"] == DESK_RICH_DIGEST
+
+
+def test_save_manifest_omitted_desk_tunables_keeps_local(mem):
+    mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["k"] == 4
+    assert desk["rejuvenation_every"] == 3
+    assert desk["plateau_window"] == 6
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_save_manifest_omitted_policy_keeps_local_desk_tunables(mem):
+    mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest())
+    desk = mem.get_desk_policy()
+    assert desk["k"] == 4
+    assert desk["rejuvenation_every"] == 3
+    assert desk["plateau_window"] == 6
+    assert desk["mode"] == DESK_RICH_DIGEST
+
+
 def test_observe_includes_promotion_policy(mem):
     from kav_sdk.memory import PROMOTION_AUTO_GUARDED
     from kav_sdk.tools import make_kav_tools

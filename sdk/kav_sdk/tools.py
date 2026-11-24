@@ -26,7 +26,9 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         Desk mode is a config change (D-031 / D-034): `minimal` (default) is
         champion + top-k + rejuvenated; `rich_digest` adds a compact off-desk
         history. Optional `policy.desk` on the host manifest seeds the mode.
-        Optional `policy.max_inflight` (D-035) seeds the parallel host-run cap.
+        Optional `policy.k` / `policy.rejuvenation_every` /
+        `policy.plateau_window` (D-036) seed desk tunables. Optional
+        `policy.max_inflight` (D-035) seeds the parallel host-run cap.
         Consumes event-driven wakes (D-030) so each result ingestion is
         delivered to the control plane once.
         """

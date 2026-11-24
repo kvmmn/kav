@@ -92,7 +92,7 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
+      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
       "properties": {
         "promotion": {
           "enum": ["manual", "auto_guarded"],
@@ -111,6 +111,21 @@
         "desk": {
           "enum": ["minimal", "rich_digest"],
           "description": "Optional OBSERVE desk mode (ADR-004 Q1 / D-031). Omitted keeps the project-local tunable (default minimal)."
+        },
+        "k": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional top-k desk size (ADR-004 Q1 / D-015). Omitted keeps the project-local tunable (default 10)."
+        },
+        "rejuvenation_every": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional rejuvenation cadence in completed runs (ADR-004 Q1 / D-029). Omitted keeps the project-local tunable (default 8)."
+        },
+        "plateau_window": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional plateau window in completed runs (ADR-004 Q1 / D-029). Omitted keeps the project-local tunable (default 5)."
         },
         "max_inflight": {
           "type": "integer",

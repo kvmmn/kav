@@ -29,10 +29,12 @@ YOUR LOOP:
 - observe(): start here. The desk is champion + top-k findings (k≈10) plus any
   rejuvenated discarded approaches. desk_policy.mode is `minimal` (default) or
   `rich_digest` (compact off-desk history); optional `policy.desk` on the host
-  manifest (D-034) seeds that mode on attach. Optional `policy.max_inflight`
-  (D-035) seeds the parallel host-run cap; omitted keeps the local tunable
-  (default 2). Also read recent experiments, failure streak, and
-  circuit_breaker halt state.
+  manifest (D-034) seeds that mode on attach. Optional `policy.k` /
+  `policy.rejuvenation_every` / `policy.plateau_window` (D-036) seed desk
+  tunables; omitted keeps local values (defaults 10 / 8 / 5). Optional
+  `policy.max_inflight` (D-035) seeds the parallel host-run cap; omitted
+  keeps the local tunable (default 2). Also read recent experiments, failure
+  streak, and circuit_breaker halt state.
 - If circuit_breaker.halted is set, do not issue_spec. Wait for a human to
   resume_strategy(); the halt is an operational finding, not something you clear.
 - Do not call rejuvenate() yourself unless the desk is empty of useful leads

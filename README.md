@@ -18,7 +18,8 @@ project via the host manifest (`policy.promotion`: `manual` default;
 `min_delta` / `confirmations`) +
 **minimal desk** (champion + top-k) with deliberate **rejuvenation** of discarded
 approaches + **rich-history digest** as a desk config (`minimal` default;
-`rich_digest` adds compact off-desk history; optional `policy.desk` on the
+`rich_digest` adds compact off-desk history; optional `policy.desk` /
+`policy.k` / `policy.rejuvenation_every` / `policy.plateau_window` on the
 host manifest) + **event-driven wake** (issue
 further hypotheses while the host runs; OBSERVE consumes `result_ingested`
 wakes; optional `policy.max_inflight` on the host manifest). Contracts, SDK,
@@ -57,7 +58,7 @@ Hypothesis → Bounded Experiment → Trusted Evidence → Memory → Better Hyp
 | Execute | Host (adapter) | Runs experiment; KAV never touches the evaluator |
 | Ingest | Host → KAV | `ExperimentResult` — measurement as reported, failures included |
 | Distill | KAV | `ResearchFinding` — durable knowledge with lineage |
-| Promote | Policy (V1) | Host manifest `policy.promotion`: `manual` (default, human `promote` tool) or `auto_guarded` (D-028 / D-032); optional `min_delta` / `confirmations` (D-033); optional `max_inflight` (D-035) |
+| Promote | Policy (V1) | Host manifest `policy.promotion`: `manual` (default, human `promote` tool) or `auto_guarded` (D-028 / D-032); optional `min_delta` / `confirmations` (D-033); optional desk tunables (D-036); optional `max_inflight` (D-035) |
 
 See [docs/architecture.md](docs/architecture.md) for control-plane vs.
 execution-plane separation and adapter operations.

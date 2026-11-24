@@ -105,10 +105,11 @@ class HostRunner:
     def attach(self) -> None:
         """Copy host declarations into project memory (adapter's job, not the agent's).
 
-        `save_manifest` also seeds promotion_policy, desk_policy.mode, and
+        `save_manifest` also seeds promotion_policy, desk_policy, and
         execution_policy.max_inflight from optional `manifest.policy`
-        (D-032 / D-033 / D-034 / D-035). Omitted policy is manual; omitted
-        `min_delta` / `confirmations` / `desk` / `max_inflight` keep
+        (D-032 / D-033 / D-034 / D-035 / D-036). Omitted policy is manual;
+        omitted `min_delta` / `confirmations` / `desk` / `k` /
+        `rejuvenation_every` / `plateau_window` / `max_inflight` keep
         project-local tunables.
         """
         self.memory.save_manifest(self.adapter.manifest())

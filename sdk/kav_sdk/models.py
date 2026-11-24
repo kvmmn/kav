@@ -59,12 +59,15 @@ class EvaluatorDecl(BaseModel):
 
 @_strict
 class PolicyDecl(BaseModel):
-    """Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035). Declarations only."""
+    """Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036). Declarations only."""
 
     promotion: Literal["manual", "auto_guarded"] = "manual"
     min_delta: float | None = Field(default=None, ge=0)
     confirmations: int | None = Field(default=None, ge=1)
     desk: Literal["minimal", "rich_digest"] | None = None
+    k: int | None = Field(default=None, ge=1)
+    rejuvenation_every: int | None = Field(default=None, ge=1)
+    plateau_window: int | None = Field(default=None, ge=1)
     max_inflight: int | None = Field(default=None, ge=1)
 
 
@@ -116,6 +119,24 @@ class ProjectManifest(BaseModel):
         if self.policy is None:
             return None
         return self.policy.desk
+
+    def desk_k(self) -> int | None:
+        """Declared desk k, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.k
+
+    def desk_rejuvenation_every(self) -> int | None:
+        """Declared rejuvenation cadence, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.rejuvenation_every
+
+    def desk_plateau_window(self) -> int | None:
+        """Declared plateau window, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.plateau_window
 
     def execution_max_inflight(self) -> int | None:
         """Declared in-flight cap, or None to keep the project-local tunable."""

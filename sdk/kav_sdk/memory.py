@@ -150,15 +150,15 @@ class ProjectMemory:
         self.apply_manifest_policy(m)
 
     def apply_manifest_policy(self, m: ProjectManifest) -> None:
-        """Seed promotion, desk, and execution policy from the host (D-032–D-035).
+        """Seed promotion, desk, and execution policy from the host (D-032–D-036).
 
         Manifest is the source of truth on attach. Omitted `policy` is `manual`.
         Declared `min_delta` / `confirmations` seed local tunables; omitted
         fields keep the current project-local values (defaults 0 and 2).
-        Declared `desk` seeds `desk_policy.mode`; omitted keeps local
-        (default `minimal`). k / rejuvenation_every / plateau_window stay local.
-        Declared `max_inflight` seeds `execution_policy`; omitted keeps local
-        (default 2).
+        Declared `desk` / `k` / `rejuvenation_every` / `plateau_window` seed
+        `desk_policy`; omitted fields keep local values (defaults `minimal`,
+        10, 8, 5). Declared `max_inflight` seeds `execution_policy`; omitted
+        keeps local (default 2).
         """
         current = self.get_promotion_policy()
         min_delta = m.promotion_min_delta()
@@ -171,13 +171,20 @@ class ProjectMemory:
             ),
         )
         desk_mode = m.desk_mode()
-        if desk_mode is not None:
+        desk_k = m.desk_k()
+        desk_every = m.desk_rejuvenation_every()
+        desk_window = m.desk_plateau_window()
+        if any(v is not None for v in (desk_mode, desk_k, desk_every, desk_window)):
             desk = self.get_desk_policy()
             self.set_desk_policy(
-                k=desk["k"],
-                rejuvenation_every=desk["rejuvenation_every"],
-                plateau_window=desk["plateau_window"],
-                mode=desk_mode,
+                k=desk["k"] if desk_k is None else desk_k,
+                rejuvenation_every=(
+                    desk["rejuvenation_every"] if desk_every is None else desk_every
+                ),
+                plateau_window=(
+                    desk["plateau_window"] if desk_window is None else desk_window
+                ),
+                mode=desk["mode"] if desk_mode is None else desk_mode,
             )
         max_inflight = m.execution_max_inflight()
         if max_inflight is not None:
