@@ -92,7 +92,7 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
+      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036 / D-037). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
       "properties": {
         "promotion": {
           "enum": ["manual", "auto_guarded"],
@@ -131,6 +131,11 @@
           "type": "integer",
           "minimum": 1,
           "description": "Optional parallel host-run cap (ADR-004 Q2 / D-030). Omitted keeps the project-local tunable (default 2)."
+        },
+        "circuit_breaker": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional similar-failure streak that triggers halt (ADR-004 Q3 / D-027). Omitted keeps the project-local tunable (default 3)."
         }
       }
     }

@@ -168,6 +168,31 @@ def test_attach_seeds_declared_desk_tunables(mem):
     assert desk["mode"] == DESK_RICH_DIGEST
 
 
+def test_attach_seeds_declared_circuit_breaker(mem):
+    mem.set_circuit_policy(threshold=4)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(circuit_breaker=2)}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    assert mem.get_circuit_policy()["threshold"] == 2
+
+
+def test_attach_omitted_circuit_breaker_keeps_local(mem):
+    mem.set_circuit_policy(threshold=4)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(promotion="auto_guarded")}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    assert mem.get_circuit_policy()["threshold"] == 4
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
 def test_attach_omitted_desk_tunables_keeps_local(mem):
     mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_RICH_DIGEST)
     host = SimulatedHost(

@@ -120,7 +120,7 @@ in [adr/ADR-004-research-loop-policies.md](adr/ADR-004-research-loop-policies.md
 
 The adapter surface is fixed at four host-facing operations (decision D-009):
 
-1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033), optional `policy.desk` (`minimal` / `rich_digest`; D-034), optional `policy.k` / `rejuvenation_every` / `plateau_window` (D-036), and optional `policy.max_inflight` (≥ 1; D-035)
+1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033), optional `policy.desk` (`minimal` / `rich_digest`; D-034), optional `policy.k` / `rejuvenation_every` / `plateau_window` (D-036), optional `policy.max_inflight` (≥ 1; D-035), and optional `policy.circuit_breaker` (≥ 1; D-037)
 2. **Search space** — finite typed domains per parameter; defaults for deltas
 3. **Run experiment** — host receives a validated `ExperimentSpec`
 4. **Report result** — host returns `ExperimentResult` (including failures)
@@ -146,9 +146,12 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
 
 - Findings are **immutable**; supersession uses `superseded_by`
 - A **champion** table tracks the current best config and metric
-- **Consecutive failure** tracking feeds a circuit breaker (ADR-004). Three
-  consecutive failures of structurally similar specs halt the strategy and
-  write an `operational` finding as the human alert (D-027). Resume is human-gated.
+- **Consecutive failure** tracking feeds a circuit breaker (ADR-004 / D-027 /
+  D-037). N consecutive failures of structurally similar specs halt the
+  strategy and write an `operational` finding as the human alert. The host
+  chooses N per project via optional `policy.circuit_breaker` on the
+  manifest; attach seeds project-local `circuit_policy.threshold`; omitted
+  keeps the local value (default 3). Resume is human-gated.
 - **Promotion policy** is pluggable (ADR-004 Q2 / D-028 / D-032 / D-033): the
   host chooses per project via optional `policy.promotion` on the manifest
   (`manual` default if omitted, or `auto_guarded`) and optional

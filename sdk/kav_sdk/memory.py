@@ -94,6 +94,10 @@ CREATE TABLE IF NOT EXISTS execution_policy (
     project_id TEXT PRIMARY KEY,
     max_inflight INTEGER NOT NULL DEFAULT 2
 );
+CREATE TABLE IF NOT EXISTS circuit_policy (
+    project_id TEXT PRIMARY KEY,
+    threshold INTEGER NOT NULL DEFAULT 3
+);
 CREATE TABLE IF NOT EXISTS wake_events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
@@ -106,6 +110,7 @@ CREATE TABLE IF NOT EXISTS wake_events (
 
 _FAIL_STATUSES = frozenset({"failed", "timeout", "rejected"})
 CIRCUIT_BREAKER_THRESHOLD = 3
+DEFAULT_CIRCUIT_BREAKER = CIRCUIT_BREAKER_THRESHOLD
 PROMOTION_MANUAL = "manual"
 PROMOTION_AUTO_GUARDED = "auto_guarded"
 _PROMOTION_MODES = frozenset({PROMOTION_MANUAL, PROMOTION_AUTO_GUARDED})
@@ -150,7 +155,7 @@ class ProjectMemory:
         self.apply_manifest_policy(m)
 
     def apply_manifest_policy(self, m: ProjectManifest) -> None:
-        """Seed promotion, desk, and execution policy from the host (D-032–D-036).
+        """Seed promotion, desk, execution, and circuit policy from the host (D-032–D-037).
 
         Manifest is the source of truth on attach. Omitted `policy` is `manual`.
         Declared `min_delta` / `confirmations` seed local tunables; omitted
@@ -158,7 +163,8 @@ class ProjectMemory:
         Declared `desk` / `k` / `rejuvenation_every` / `plateau_window` seed
         `desk_policy`; omitted fields keep local values (defaults `minimal`,
         10, 8, 5). Declared `max_inflight` seeds `execution_policy`; omitted
-        keeps local (default 2).
+        keeps local (default 2). Declared `circuit_breaker` seeds
+        `circuit_policy.threshold`; omitted keeps local (default 3).
         """
         current = self.get_promotion_policy()
         min_delta = m.promotion_min_delta()
@@ -189,6 +195,9 @@ class ProjectMemory:
         max_inflight = m.execution_max_inflight()
         if max_inflight is not None:
             self.set_execution_policy(max_inflight=max_inflight)
+        circuit_breaker = m.circuit_breaker_threshold()
+        if circuit_breaker is not None:
+            self.set_circuit_policy(threshold=circuit_breaker)
 
     def get_manifest(self) -> ProjectManifest | None:
         row = self.conn.execute(
@@ -297,6 +306,25 @@ class ProjectMemory:
         )
         self.conn.commit()
 
+    def get_circuit_policy(self) -> dict[str, Any]:
+        row = self.conn.execute(
+            "SELECT threshold FROM circuit_policy WHERE project_id=?",
+            (self.project_id,),
+        ).fetchone()
+        if row is None:
+            return {"threshold": DEFAULT_CIRCUIT_BREAKER}
+        return {"threshold": int(row["threshold"])}
+
+    def set_circuit_policy(self, threshold: int = DEFAULT_CIRCUIT_BREAKER) -> None:
+        if threshold < 1:
+            raise ValueError("circuit_breaker must be >= 1")
+        self.conn.execute(
+            "INSERT OR REPLACE INTO circuit_policy (project_id, threshold) "
+            "VALUES (?, ?)",
+            (self.project_id, threshold),
+        )
+        self.conn.commit()
+
     def record_wake(self, experiment_id: str, kind: str = WAKE_RESULT_INGESTED) -> None:
         """Queue an event-driven wake (ADR-004 Q2 / D-030). Caller commits."""
         self.conn.execute(
@@ -347,10 +375,11 @@ class ProjectMemory:
 
     def consecutive_similar_failures(self) -> int:
         """Failure streak sharing the most recent failure's spec signature."""
+        lookback = max(20, self.get_circuit_policy()["threshold"])
         rows = self.conn.execute(
             "SELECT status, spec FROM experiments WHERE project_id=? "
-            "AND status IS NOT NULL ORDER BY seq DESC LIMIT 20",
-            (self.project_id,),
+            "AND status IS NOT NULL ORDER BY seq DESC LIMIT ?",
+            (self.project_id, lookback),
         ).fetchall()
         if not rows or rows[0]["status"] not in _FAIL_STATUSES:
             return 0
@@ -377,15 +406,17 @@ class ProjectMemory:
         return dict(row) if row else None
 
     def evaluate_circuit_breaker(self, result: ExperimentResult) -> bool:
-        """Halt + operational alert when 3 similar consecutive failures land (D-027).
+        """Halt + operational alert when N similar consecutive failures land (D-027 / D-037).
 
-        Returns True when the strategy is (now, or already) halted.
+        N is `circuit_policy.threshold` (default 3). Returns True when the
+        strategy is (now, or already) halted.
         """
         if self.is_halted():
             return True
         if result.status.value not in _FAIL_STATUSES:
             return False
-        if self.consecutive_similar_failures() < CIRCUIT_BREAKER_THRESHOLD:
+        threshold = self.get_circuit_policy()["threshold"]
+        if self.consecutive_similar_failures() < threshold:
             return False
         row = self.get_experiment(result.experiment_id)
         if row is None:
@@ -401,7 +432,7 @@ class ProjectMemory:
             kind="operational",
             statement=(
                 f"Circuit breaker halted the current strategy after "
-                f"{CIRCUIT_BREAKER_THRESHOLD} consecutive similar failures "
+                f"{threshold} consecutive similar failures "
                 f"on parameters [{signature or 'none'}]."
             ),
             confidence=0.9,

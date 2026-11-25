@@ -33,7 +33,9 @@ YOUR LOOP:
   `policy.rejuvenation_every` / `policy.plateau_window` (D-036) seed desk
   tunables; omitted keeps local values (defaults 10 / 8 / 5). Optional
   `policy.max_inflight` (D-035) seeds the parallel host-run cap; omitted
-  keeps the local tunable (default 2). Also read recent experiments, failure
+  keeps the local tunable (default 2). Optional `policy.circuit_breaker`
+  (D-037) seeds the similar-failure halt streak; omitted keeps the local
+  tunable (default 3). Also read recent experiments, failure
   streak, and circuit_breaker halt state.
 - If circuit_breaker.halted is set, do not issue_spec. Wait for a human to
   resume_strategy(); the halt is an operational finding, not something you clear.

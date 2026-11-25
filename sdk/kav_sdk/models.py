@@ -59,7 +59,7 @@ class EvaluatorDecl(BaseModel):
 
 @_strict
 class PolicyDecl(BaseModel):
-    """Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036). Declarations only."""
+    """Owner-chosen V1 autonomy (ADR-004 / D-032–D-037). Declarations only."""
 
     promotion: Literal["manual", "auto_guarded"] = "manual"
     min_delta: float | None = Field(default=None, ge=0)
@@ -69,6 +69,7 @@ class PolicyDecl(BaseModel):
     rejuvenation_every: int | None = Field(default=None, ge=1)
     plateau_window: int | None = Field(default=None, ge=1)
     max_inflight: int | None = Field(default=None, ge=1)
+    circuit_breaker: int | None = Field(default=None, ge=1)
 
 
 @_strict
@@ -143,6 +144,12 @@ class ProjectManifest(BaseModel):
         if self.policy is None:
             return None
         return self.policy.max_inflight
+
+    def circuit_breaker_threshold(self) -> int | None:
+        """Declared halt streak, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.circuit_breaker
 
 
 # ------------------------------------------------------------ SearchSpace

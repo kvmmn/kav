@@ -544,6 +544,63 @@ def test_save_manifest_omitted_desk_tunables_keeps_local(mem):
     assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
 
 
+def test_save_manifest_seeds_declared_circuit_breaker(mem):
+    mem.set_circuit_policy(threshold=4)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(circuit_breaker=2)}
+    ))
+    assert mem.get_circuit_policy()["threshold"] == 2
+
+
+def test_save_manifest_omitted_circuit_breaker_keeps_local(mem):
+    mem.set_circuit_policy(threshold=4)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    assert mem.get_circuit_policy()["threshold"] == 4
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_save_manifest_omitted_policy_keeps_local_circuit_breaker(mem):
+    mem.set_circuit_policy(threshold=4)
+    mem.save_manifest(manifest())
+    assert mem.get_circuit_policy()["threshold"] == 4
+
+
+def test_declared_threshold_two_halts_after_two_similar_failures(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.set_circuit_policy(threshold=2)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-f05001"))
+    out = tools["ingest_result"](_failed("exp-f05001").model_dump_json())
+    assert out.startswith("RECORDED")
+    assert not mem.is_halted()
+    mem.save_spec(spec("exp-f05002"))
+    out = tools["ingest_result"](_failed("exp-f05002").model_dump_json())
+    assert out.startswith("HALTED")
+    assert mem.is_halted()
+    assert mem.consecutive_similar_failures() == 2
+
+
+def test_declared_threshold_four_does_not_halt_after_three(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    mem.set_circuit_policy(threshold=4)
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    for eid in ["exp-f06001", "exp-f06002", "exp-f06003"]:
+        mem.save_spec(spec(eid))
+        out = tools["ingest_result"](_failed(eid).model_dump_json())
+    assert out.startswith("RECORDED")
+    assert not mem.is_halted()
+    assert mem.consecutive_similar_failures() == 3
+
+
+def test_circuit_policy_rejects_non_positive_threshold(mem):
+    with pytest.raises(ValueError, match="circuit_breaker"):
+        mem.set_circuit_policy(threshold=0)
+
+
 def test_save_manifest_omitted_policy_keeps_local_desk_tunables(mem):
     mem.set_desk_policy(k=4, rejuvenation_every=3, plateau_window=6, mode=DESK_RICH_DIGEST)
     mem.save_manifest(manifest())
@@ -724,6 +781,7 @@ def test_observe_includes_desk(mem):
     assert state["desk_policy"]["k"] == 10
     assert state["desk_policy"]["mode"] == DESK_MINIMAL
     assert state["execution_policy"]["max_inflight"] == 2
+    assert state["circuit_policy"]["threshold"] == 3
     assert state["pending"] == []
     assert state["inflight"] == []
     assert state["wakes"] == []

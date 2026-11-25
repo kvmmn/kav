@@ -35,8 +35,12 @@ Optional `policy.k` / `policy.rejuvenation_every` / `policy.plateau_window`
 ## Q3 — Failures: finding-always + circuit-breaker
 - Every failed/timeout/rejected run routes through normal analysis and distills
   a finding (principle 8.12).
-- Circuit breaker: 3 consecutive failures of structurally similar specs → halt
+- Circuit breaker: N consecutive failures of structurally similar specs → halt
   the current strategy, raise a systemic-issue alert to the human.
+  Implemented as D-027 (halt + operational alert; default N=3).
+  Owner-chosen per project via optional `policy.circuit_breaker` on
+  ProjectManifest (D-037); attach seeds project-local
+  `circuit_policy.threshold`; omitted keeps local values (default 3).
 
 ## Laws check
 L1 ✓ host still measures · L2 ✓ budgets unchanged · L3 ✓ every route produces

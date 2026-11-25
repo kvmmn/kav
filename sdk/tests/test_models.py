@@ -254,3 +254,21 @@ def test_rejuvenation_every_below_one_rejected():
 def test_plateau_window_below_one_rejected():
     with pytest.raises(ValidationError):
         manifest(policy={"plateau_window": 0})
+
+
+# ---- circuit_breaker via manifest (D-037)
+def test_omitted_circuit_breaker_is_none():
+    m = manifest()
+    assert m.circuit_breaker_threshold() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.circuit_breaker_threshold() is None
+
+
+def test_policy_circuit_breaker_declared():
+    m = manifest(policy=PolicyDecl(circuit_breaker=2))
+    assert m.circuit_breaker_threshold() == 2
+
+
+def test_circuit_breaker_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"circuit_breaker": 0})
