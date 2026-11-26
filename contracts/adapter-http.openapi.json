@@ -1,0 +1,166 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "KAV Host Adapter HTTP",
+    "description": "HTTP transport for the four adapter operations (D-009, D-026). Request and response bodies are the canonical JSON Schemas in this directory (ADR-003). KAV never receives evaluator credentials or access paths (Law 1).",
+    "version": "0.1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Adapter base URL (host-chosen)"
+    }
+  ],
+  "paths": {
+    "/v0.1/manifest": {
+      "get": {
+        "operationId": "getManifest",
+        "summary": "Register / read the project manifest",
+        "responses": {
+          "200": {
+            "description": "ProjectManifest v0.1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./project-manifest.schema.json"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v0.1/search-space": {
+      "get": {
+        "operationId": "getSearchSpace",
+        "summary": "Declare the bounded search space",
+        "responses": {
+          "200": {
+            "description": "SearchSpace v0.1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./search-space.schema.json"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v0.1/experiments": {
+      "post": {
+        "operationId": "runExperiment",
+        "summary": "Run one validated ExperimentSpec on the host evaluator",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./experiment-spec.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ExperimentResult as reported by the host",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./experiment-result.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Body failed ExperimentSpec validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v0.1/results": {
+      "post": {
+        "operationId": "reportResult",
+        "summary": "Return the host's honest measurement as-is (failures included)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./experiment-result.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ExperimentResult v0.1 (echo / host-side report)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./experiment-result.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Body failed ExperimentResult validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v0.1/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "This OpenAPI document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.0.3",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

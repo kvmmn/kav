@@ -21,12 +21,36 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
     """Build the tool whitelist bound to one project's memory."""
 
     def observe() -> str:
-        """OBSERVE node input: champion config, recent experiments, active findings."""
+        """OBSERVE node input: desk plus operational overlays.
+
+        Desk mode is a config change (D-031 / D-034): `minimal` (default) is
+        champion + top-k + rejuvenated; `rich_digest` adds a compact off-desk
+        history. Optional `policy.desk` on the host manifest seeds the mode.
+        Optional `policy.k` / `policy.rejuvenation_every` /
+        `policy.plateau_window` (D-036) seed desk tunables. Optional
+        `policy.digest_cap` (D-038) seeds the rich-digest off-desk row cap.
+        Optional `policy.max_inflight` (D-035) seeds the parallel host-run cap.
+        Optional `policy.circuit_breaker` (D-037) seeds the halt streak.
+        Consumes event-driven wakes (D-030) so each result ingestion is
+        delivered to the control plane once.
+        """
+        desk = memory.desk()
+        wakes = memory.consume_wakes()
         return json.dumps({
-            "champion": memory.get_champion(),
+            "champion": desk["champion"],
+            "active_findings": desk["findings"],
+            "desk": desk,
             "recent_experiments": memory.recent_experiments(limit=10),
-            "active_findings": [f.model_dump(mode="json") for f in memory.active_findings(limit=10)],
             "failure_streak": memory.consecutive_failures(),
+            "similar_failure_streak": memory.consecutive_similar_failures(),
+            "circuit_breaker": memory.halt_state(),
+            "promotion_policy": memory.get_promotion_policy(),
+            "desk_policy": memory.get_desk_policy(),
+            "execution_policy": memory.get_execution_policy(),
+            "circuit_policy": memory.get_circuit_policy(),
+            "pending": [s.experiment_id for s in memory.pending_specs()],
+            "inflight": [s.experiment_id for s in memory.inflight_specs()],
+            "wakes": wakes,
         })
 
     def check_spec(spec_json: str) -> str:
@@ -44,6 +68,8 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
 
     def issue_spec(spec_json: str) -> str:
         """DESIGN→AWAIT_EXECUTION: persist a validated spec; host picks it up."""
+        if memory.is_halted():
+            return "HALTED: circuit breaker — human must resume_strategy before issuing"
         verdict = check_spec(spec_json)
         if verdict != "VALID":
             return verdict
@@ -55,17 +81,49 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         """INGEST node: record the host's honest report. Values stored as-is (Law 1)."""
         result = ExperimentResult.model_validate_json(result_json)
         memory.save_result(result)
-        return f"RECORDED {result.experiment_id} status={result.status.value}"
+        halted = memory.evaluate_circuit_breaker(result)
+        rejuvenated = memory.evaluate_rejuvenation()
+        if halted:
+            return (
+                f"HALTED {result.experiment_id} status={result.status.value} "
+                "circuit-breaker alert recorded"
+            )
+        extra = " REJUVENATED" if rejuvenated else ""
+        return f"RECORDED {result.experiment_id} status={result.status.value}{extra}"
+
+    def resume_strategy() -> str:
+        """Human-gated resume after a circuit-breaker halt (ADR-004 Q3)."""
+        if not memory.is_halted():
+            return "NOT_HALTED"
+        memory.clear_halt()
+        return "RESUMED"
+
+    def rejuvenate() -> str:
+        """Human-gated re-surface of discarded approaches (ADR-004 Q1 / D-029)."""
+        if memory.evaluate_rejuvenation(force=True):
+            return "REJUVENATED"
+        return "NO_CANDIDATES"
 
     def record_finding(finding_json: str) -> str:
-        """DISTILL node: write an immutable finding with lineage."""
+        """DISTILL node: write an immutable finding with lineage.
+
+        In auto_guarded mode (D-028 / D-032 / D-033), a confirmed finding may
+        promote the champion when independent-confirmation gates pass. Mode and
+        optional min_delta / confirmations are seeded from the host manifest
+        on attach.
+        """
         f = ResearchFinding.model_validate_json(finding_json)
         memory.save_finding(f)
+        if memory.evaluate_auto_guarded(f):
+            return f"RECORDED {f.finding_id} PROMOTED (auto_guarded)"
         return f"RECORDED {f.finding_id}"
 
     def promote(config: dict[str, Any], metric_value: float, experiment_id: str) -> str:
-        """PROMOTE_GATE (manual mode): human-approved champion update."""
+        """PROMOTE_GATE: human-approved champion update (override in both modes)."""
         memory.set_champion(config, metric_value, experiment_id)
         return f"PROMOTED (champion metric={metric_value})"
 
-    return [observe, check_spec, issue_spec, ingest_result, record_finding, promote]
+    return [
+        observe, check_spec, issue_spec, ingest_result, record_finding,
+        promote, resume_strategy, rejuvenate,
+    ]
