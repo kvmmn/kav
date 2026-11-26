@@ -13,7 +13,8 @@ Owner-chosen per project via optional `policy.desk` on ProjectManifest (D-034);
 attach seeds project-local desk_policy.mode; omitted keeps local values.
 Optional `policy.k` / `policy.rejuvenation_every` / `policy.plateau_window`
 (D-036) seed the remaining desk tunables; omitted keeps local values
-(defaults 10 / 8 / 5).
+(defaults 10 / 8 / 5). Optional `policy.digest_cap` (D-038) seeds the
+rich-digest off-desk row cap; omitted keeps the local value (default 30).
 
 ## Q2 — Pauses: parallel async execution; promotion policy is pluggable
 - After DESIGN, KAV continues working on other hypotheses while the host executes

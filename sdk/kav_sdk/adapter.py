@@ -108,10 +108,10 @@ class HostRunner:
         `save_manifest` also seeds promotion_policy, desk_policy,
         execution_policy.max_inflight, and circuit_policy.threshold from
         optional `manifest.policy` (D-032 / D-033 / D-034 / D-035 / D-036 /
-        D-037). Omitted policy is manual; omitted `min_delta` /
+        D-037 / D-038). Omitted policy is manual; omitted `min_delta` /
         `confirmations` / `desk` / `k` / `rejuvenation_every` /
-        `plateau_window` / `max_inflight` / `circuit_breaker` keep
-        project-local tunables.
+        `plateau_window` / `digest_cap` / `max_inflight` / `circuit_breaker`
+        keep project-local tunables.
         """
         self.memory.save_manifest(self.adapter.manifest())
         self.memory.save_search_space(self.adapter.search_space())

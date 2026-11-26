@@ -120,7 +120,7 @@ in [adr/ADR-004-research-loop-policies.md](adr/ADR-004-research-loop-policies.md
 
 The adapter surface is fixed at four host-facing operations (decision D-009):
 
-1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033), optional `policy.desk` (`minimal` / `rich_digest`; D-034), optional `policy.k` / `rejuvenation_every` / `plateau_window` (D-036), optional `policy.max_inflight` (≥ 1; D-035), and optional `policy.circuit_breaker` (≥ 1; D-037)
+1. **Manifest** — objective, budget ceiling, forbidden actions, evaluator ownership, optional `policy.promotion` (`manual` default / `auto_guarded`; D-032) plus optional `min_delta` / `confirmations` (D-033), optional `policy.desk` (`minimal` / `rich_digest`; D-034), optional `policy.k` / `rejuvenation_every` / `plateau_window` (D-036), optional `policy.digest_cap` (≥ 1; D-038), optional `policy.max_inflight` (≥ 1; D-035), and optional `policy.circuit_breaker` (≥ 1; D-037)
 2. **Search space** — finite typed domains per parameter; defaults for deltas
 3. **Run experiment** — host receives a validated `ExperimentSpec`
 4. **Report result** — host returns `ExperimentResult` (including failures)
@@ -165,9 +165,9 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
   champion + top-k active findings. Mode is a config change: `minimal`
   (default) or `rich_digest` (compact off-desk history). The host chooses per
   project via optional `policy.desk` / `policy.k` / `policy.rejuvenation_every`
-  / `policy.plateau_window` on the manifest; attach seeds those
-  `desk_policy` fields; omitted keeps local values (defaults `minimal`, 10, 8,
-  5). Discarded approaches re-enter the desk on plateau, a periodic cadence,
+  / `policy.plateau_window` / `policy.digest_cap` on the manifest; attach seeds
+  those `desk_policy` fields; omitted keeps local values (defaults `minimal`,
+  10, 8, 5, 30). Discarded approaches re-enter the desk on plateau, a periodic cadence,
   a search-space condition change, or a human `rejuvenate`.
 - **Execution** is event-driven (ADR-004 Q2 / D-030 / D-035): queued vs
   in-flight specs, `max_inflight` (default 2), and `result_ingested` wakes

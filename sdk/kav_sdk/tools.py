@@ -28,7 +28,8 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         history. Optional `policy.desk` on the host manifest seeds the mode.
         Optional `policy.k` / `policy.rejuvenation_every` /
         `policy.plateau_window` (D-036) seed desk tunables. Optional
-        `policy.max_inflight` (D-035) seeds the parallel host-run cap.
+        `policy.digest_cap` (D-038) seeds the rich-digest off-desk row cap.
+        Optional `policy.max_inflight` (D-035) seeds the parallel host-run cap.
         Optional `policy.circuit_breaker` (D-037) seeds the halt streak.
         Consumes event-driven wakes (D-030) so each result ingestion is
         delivered to the control plane once.

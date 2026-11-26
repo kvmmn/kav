@@ -59,7 +59,7 @@ class EvaluatorDecl(BaseModel):
 
 @_strict
 class PolicyDecl(BaseModel):
-    """Owner-chosen V1 autonomy (ADR-004 / D-032–D-037). Declarations only."""
+    """Owner-chosen V1 autonomy (ADR-004 / D-032–D-038). Declarations only."""
 
     promotion: Literal["manual", "auto_guarded"] = "manual"
     min_delta: float | None = Field(default=None, ge=0)
@@ -68,6 +68,7 @@ class PolicyDecl(BaseModel):
     k: int | None = Field(default=None, ge=1)
     rejuvenation_every: int | None = Field(default=None, ge=1)
     plateau_window: int | None = Field(default=None, ge=1)
+    digest_cap: int | None = Field(default=None, ge=1)
     max_inflight: int | None = Field(default=None, ge=1)
     circuit_breaker: int | None = Field(default=None, ge=1)
 
@@ -138,6 +139,12 @@ class ProjectManifest(BaseModel):
         if self.policy is None:
             return None
         return self.policy.plateau_window
+
+    def desk_digest_cap(self) -> int | None:
+        """Declared digest truncation cap, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.digest_cap
 
     def execution_max_inflight(self) -> int | None:
         """Declared in-flight cap, or None to keep the project-local tunable."""

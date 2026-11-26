@@ -92,7 +92,7 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036 / D-037). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
+      "description": "Owner-chosen V1 autonomy (ADR-004 / D-032 / D-033 / D-034 / D-035 / D-036 / D-037 / D-038). Omitted = manual promotion with local tunables. Declarations only — no evaluator access.",
       "properties": {
         "promotion": {
           "enum": ["manual", "auto_guarded"],
@@ -126,6 +126,11 @@
           "type": "integer",
           "minimum": 1,
           "description": "Optional plateau window in completed runs (ADR-004 Q1 / D-029). Omitted keeps the project-local tunable (default 5)."
+        },
+        "digest_cap": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional rich-digest off-desk row cap (ADR-004 Q1 / D-031). Omitted keeps the project-local tunable (default 30)."
         },
         "max_inflight": {
           "type": "integer",

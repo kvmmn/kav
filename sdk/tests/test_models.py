@@ -272,3 +272,21 @@ def test_policy_circuit_breaker_declared():
 def test_circuit_breaker_below_one_rejected():
     with pytest.raises(ValidationError):
         manifest(policy={"circuit_breaker": 0})
+
+
+# ---- digest_cap via manifest (D-038)
+def test_omitted_digest_cap_is_none():
+    m = manifest()
+    assert m.desk_digest_cap() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.desk_digest_cap() is None
+
+
+def test_policy_digest_cap_declared():
+    m = manifest(policy=PolicyDecl(digest_cap=5))
+    assert m.desk_digest_cap() == 5
+
+
+def test_digest_cap_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"digest_cap": 0})

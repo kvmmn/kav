@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS desk_policy (
     k INTEGER NOT NULL DEFAULT 10,
     rejuvenation_every INTEGER NOT NULL DEFAULT 8,
     plateau_window INTEGER NOT NULL DEFAULT 5,
-    mode TEXT NOT NULL DEFAULT 'minimal'
+    mode TEXT NOT NULL DEFAULT 'minimal',
+    digest_cap INTEGER NOT NULL DEFAULT 30
 );
 CREATE TABLE IF NOT EXISTS rejuvenation_desk (
     project_id TEXT NOT NULL,
@@ -139,6 +140,7 @@ class ProjectMemory:
         self.conn.executescript(_SCHEMA)
         self._migrate_experiments_started_at()
         self._migrate_desk_policy_mode()
+        self._migrate_desk_policy_digest_cap()
         self.conn.commit()
 
     def close(self) -> None:
@@ -155,16 +157,17 @@ class ProjectMemory:
         self.apply_manifest_policy(m)
 
     def apply_manifest_policy(self, m: ProjectManifest) -> None:
-        """Seed promotion, desk, execution, and circuit policy from the host (D-032–D-037).
+        """Seed promotion, desk, execution, and circuit policy from the host (D-032–D-038).
 
         Manifest is the source of truth on attach. Omitted `policy` is `manual`.
         Declared `min_delta` / `confirmations` seed local tunables; omitted
         fields keep the current project-local values (defaults 0 and 2).
-        Declared `desk` / `k` / `rejuvenation_every` / `plateau_window` seed
-        `desk_policy`; omitted fields keep local values (defaults `minimal`,
-        10, 8, 5). Declared `max_inflight` seeds `execution_policy`; omitted
-        keeps local (default 2). Declared `circuit_breaker` seeds
-        `circuit_policy.threshold`; omitted keeps local (default 3).
+        Declared `desk` / `k` / `rejuvenation_every` / `plateau_window` /
+        `digest_cap` seed `desk_policy`; omitted fields keep local values
+        (defaults `minimal`, 10, 8, 5, 30). Declared `max_inflight` seeds
+        `execution_policy`; omitted keeps local (default 2). Declared
+        `circuit_breaker` seeds `circuit_policy.threshold`; omitted keeps
+        local (default 3).
         """
         current = self.get_promotion_policy()
         min_delta = m.promotion_min_delta()
@@ -180,7 +183,11 @@ class ProjectMemory:
         desk_k = m.desk_k()
         desk_every = m.desk_rejuvenation_every()
         desk_window = m.desk_plateau_window()
-        if any(v is not None for v in (desk_mode, desk_k, desk_every, desk_window)):
+        desk_cap = m.desk_digest_cap()
+        if any(
+            v is not None
+            for v in (desk_mode, desk_k, desk_every, desk_window, desk_cap)
+        ):
             desk = self.get_desk_policy()
             self.set_desk_policy(
                 k=desk["k"] if desk_k is None else desk_k,
@@ -191,6 +198,7 @@ class ProjectMemory:
                     desk["plateau_window"] if desk_window is None else desk_window
                 ),
                 mode=desk["mode"] if desk_mode is None else desk_mode,
+                digest_cap=desk["digest_cap"] if desk_cap is None else desk_cap,
             )
         max_inflight = m.execution_max_inflight()
         if max_inflight is not None:
@@ -561,8 +569,8 @@ class ProjectMemory:
     # -------------------------------------------------------------- desk (Q1)
     def get_desk_policy(self) -> dict[str, Any]:
         row = self.conn.execute(
-            "SELECT k, rejuvenation_every, plateau_window, mode FROM desk_policy "
-            "WHERE project_id=?",
+            "SELECT k, rejuvenation_every, plateau_window, mode, digest_cap "
+            "FROM desk_policy WHERE project_id=?",
             (self.project_id,),
         ).fetchone()
         if row is None:
@@ -571,13 +579,20 @@ class ProjectMemory:
                 "rejuvenation_every": DEFAULT_REJUVENATION_EVERY,
                 "plateau_window": DEFAULT_PLATEAU_WINDOW,
                 "mode": DESK_MINIMAL,
+                "digest_cap": DEFAULT_DIGEST_CAP,
             }
         stored_mode = row["mode"] if "mode" in row.keys() and row["mode"] else DESK_MINIMAL
+        stored_cap = (
+            int(row["digest_cap"])
+            if "digest_cap" in row.keys() and row["digest_cap"] is not None
+            else DEFAULT_DIGEST_CAP
+        )
         return {
             "k": int(row["k"]),
             "rejuvenation_every": int(row["rejuvenation_every"]),
             "plateau_window": int(row["plateau_window"]),
             "mode": stored_mode,
+            "digest_cap": stored_cap,
         }
 
     def set_desk_policy(
@@ -586,6 +601,7 @@ class ProjectMemory:
         rejuvenation_every: int = DEFAULT_REJUVENATION_EVERY,
         plateau_window: int = DEFAULT_PLATEAU_WINDOW,
         mode: str | None = None,
+        digest_cap: int | None = None,
     ) -> None:
         if k < 1:
             raise ValueError("k must be >= 1")
@@ -593,15 +609,27 @@ class ProjectMemory:
             raise ValueError("rejuvenation_every must be >= 1")
         if plateau_window < 1:
             raise ValueError("plateau_window must be >= 1")
+        current = self.get_desk_policy()
         if mode is None:
-            mode = self.get_desk_policy()["mode"]
+            mode = current["mode"]
+        if digest_cap is None:
+            digest_cap = current["digest_cap"]
+        if digest_cap < 1:
+            raise ValueError("digest_cap must be >= 1")
         if mode not in _DESK_MODES:
             raise ValueError(f"unknown desk mode: {mode}")
         self.conn.execute(
             "INSERT OR REPLACE INTO desk_policy "
-            "(project_id, k, rejuvenation_every, plateau_window, mode) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (self.project_id, k, rejuvenation_every, plateau_window, mode),
+            "(project_id, k, rejuvenation_every, plateau_window, mode, digest_cap) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                self.project_id,
+                k,
+                rejuvenation_every,
+                plateau_window,
+                mode,
+                digest_cap,
+            ),
         )
         self.conn.commit()
 
@@ -656,7 +684,7 @@ class ProjectMemory:
                 "superseded": bool(r["superseded_by"]),
             })
         off.sort(key=lambda item: item["confidence"], reverse=True)
-        cap = max(self.get_desk_policy()["k"] * 3, DEFAULT_DIGEST_CAP)
+        cap = self.get_desk_policy()["digest_cap"]
         return {
             "total_findings": len(rows),
             "by_kind": by_kind,
@@ -974,6 +1002,16 @@ class ProjectMemory:
         if cols and "mode" not in cols:
             self.conn.execute(
                 "ALTER TABLE desk_policy ADD COLUMN mode TEXT NOT NULL DEFAULT 'minimal'"
+            )
+
+    def _migrate_desk_policy_digest_cap(self) -> None:
+        cols = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(desk_policy)").fetchall()
+        }
+        if cols and "digest_cap" not in cols:
+            self.conn.execute(
+                "ALTER TABLE desk_policy ADD COLUMN digest_cap INTEGER NOT NULL DEFAULT 30"
             )
 
     def _experiment_exists(self, eid: str) -> bool:

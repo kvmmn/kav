@@ -780,6 +780,7 @@ def test_observe_includes_desk(mem):
     assert state["desk"]["findings"] == state["active_findings"]
     assert state["desk_policy"]["k"] == 10
     assert state["desk_policy"]["mode"] == DESK_MINIMAL
+    assert state["desk_policy"]["digest_cap"] == 30
     assert state["execution_policy"]["max_inflight"] == 2
     assert state["circuit_policy"]["threshold"] == 3
     assert state["pending"] == []
@@ -875,5 +876,50 @@ def test_observe_rich_digest_includes_digest(mem):
     tools = {t.__name__: t for t in make_kav_tools(mem)}
     state = json.loads(tools["observe"]())
     assert state["desk_policy"]["mode"] == DESK_RICH_DIGEST
+    assert state["desk_policy"]["digest_cap"] == 30
     assert state["desk"]["digest"]["total_findings"] == 1
     assert state["desk"]["digest"]["off_desk"] == []
+
+
+def test_save_manifest_seeds_declared_digest_cap(mem):
+    mem.set_desk_policy(digest_cap=8, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(digest_cap=2)}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["digest_cap"] == 2
+    assert desk["mode"] == DESK_RICH_DIGEST
+
+
+def test_save_manifest_omitted_digest_cap_keeps_local(mem):
+    mem.set_desk_policy(digest_cap=8, mode=DESK_RICH_DIGEST)
+    mem.save_manifest(manifest().model_copy(
+        update={"policy": PolicyDecl(promotion="auto_guarded")}
+    ))
+    desk = mem.get_desk_policy()
+    assert desk["digest_cap"] == 8
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
+def test_save_manifest_omitted_policy_keeps_local_digest_cap(mem):
+    mem.set_desk_policy(digest_cap=8)
+    mem.save_manifest(manifest())
+    assert mem.get_desk_policy()["digest_cap"] == 8
+
+
+def test_declared_digest_cap_truncates_off_desk(mem):
+    mem.set_champion({"lr": 0.01}, 0.021, "exp-baseline")
+    mem.set_desk_policy(k=1, mode=DESK_RICH_DIGEST, digest_cap=1)
+    mem.save_spec(spec("exp-d10001"))
+    mem.save_finding(finding("fnd-d10001", kind="confirmed", conf=0.9))
+    mem.save_finding(finding("fnd-d10002", kind="inconclusive", conf=0.5))
+    mem.save_finding(finding("fnd-d10003", kind="refuted", conf=0.2))
+    digest = mem.desk()["digest"]
+    assert [item["finding_id"] for item in digest["off_desk"]] == ["fnd-d10002"]
+    assert digest["off_desk_truncated"] == 1
+
+
+def test_desk_policy_rejects_non_positive_digest_cap(mem):
+    with pytest.raises(ValueError, match="digest_cap"):
+        mem.set_desk_policy(digest_cap=0)

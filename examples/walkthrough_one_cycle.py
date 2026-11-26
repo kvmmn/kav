@@ -101,6 +101,7 @@ assert state["desk"]["mode"] == "minimal"
 assert state["desk_policy"]["k"] == 10
 assert state["desk_policy"]["rejuvenation_every"] == 8
 assert state["desk_policy"]["plateau_window"] == 5
+assert state["desk_policy"]["digest_cap"] == 30
 assert "digest" not in state["desk"]
 assert state["desk"]["rejuvenated"] == []
 assert state["promotion_policy"]["mode"] == "manual"

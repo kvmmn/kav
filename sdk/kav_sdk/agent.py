@@ -32,6 +32,8 @@ YOUR LOOP:
   manifest (D-034) seeds that mode on attach. Optional `policy.k` /
   `policy.rejuvenation_every` / `policy.plateau_window` (D-036) seed desk
   tunables; omitted keeps local values (defaults 10 / 8 / 5). Optional
+  `policy.digest_cap` (D-038) seeds the rich-digest off-desk row cap;
+  omitted keeps the local tunable (default 30). Optional
   `policy.max_inflight` (D-035) seeds the parallel host-run cap; omitted
   keeps the local tunable (default 2). Optional `policy.circuit_breaker`
   (D-037) seeds the similar-failure halt streak; omitted keeps the local

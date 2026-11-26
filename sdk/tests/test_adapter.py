@@ -210,6 +210,35 @@ def test_attach_omitted_desk_tunables_keeps_local(mem):
     assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
 
 
+def test_attach_seeds_declared_digest_cap(mem):
+    mem.set_desk_policy(digest_cap=8, mode=DESK_RICH_DIGEST)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(digest_cap=2)}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    desk = mem.get_desk_policy()
+    assert desk["digest_cap"] == 2
+    assert desk["mode"] == DESK_RICH_DIGEST
+
+
+def test_attach_omitted_digest_cap_keeps_local(mem):
+    mem.set_desk_policy(digest_cap=8, mode=DESK_RICH_DIGEST)
+    host = SimulatedHost(
+        manifest().model_copy(update={"policy": PolicyDecl(promotion="auto_guarded")}),
+        space(),
+        true_metric,
+    )
+    runner = HostRunner(mem, host)
+    runner.attach()
+    desk = mem.get_desk_policy()
+    assert desk["digest_cap"] == 8
+    assert desk["mode"] == DESK_RICH_DIGEST
+    assert mem.get_promotion_policy()["mode"] == PROMOTION_AUTO_GUARDED
+
+
 def test_drain_pending_is_noop_when_empty(mem):
     runner = HostRunner(mem, SimulatedHost(manifest(), space(), true_metric))
     runner.attach()
