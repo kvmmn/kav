@@ -6,7 +6,7 @@ these models are the Python projection (ADR-003).
 from kav_sdk.models import (
     ParamType, ResultStatus, FindingKind, SpecValidationError,
     validate_spec_against_project,
-    ProjectManifest, Objective, Constraints, Budget, EvaluatorDecl,
+    ProjectManifest, Objective, Constraints, Budget, EvaluatorDecl, PolicyDecl,
     SearchSpace, Parameter, Domain,
     ExperimentSpec, Change, Reproducibility,
     ExperimentResult, Evidence, CostActual, ArtifactRef, ErrorInfo,
@@ -15,6 +15,7 @@ from kav_sdk.models import (
 
 __all__ = [
     "ProjectManifest", "Objective", "Constraints", "Budget", "EvaluatorDecl",
+    "PolicyDecl",
     "SearchSpace", "Parameter", "Domain",
     "ExperimentSpec", "Change", "Reproducibility",
     "ExperimentResult", "Evidence", "CostActual", "ArtifactRef", "ErrorInfo",

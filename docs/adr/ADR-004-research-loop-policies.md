@@ -8,22 +8,45 @@ BUT: the strategy layer may deliberately re-surface previously discarded approac
 ("rejuvenation") — e.g., when conditions changed (new data, new features, plateau)
 or periodically, so old failures can be rethought rather than permanently buried.
 Retrieval mechanism designed so a rich-history digest mode is a config change later.
+Implemented as D-031: `desk_policy.mode` `minimal` (default) or `rich_digest`.
+Owner-chosen per project via optional `policy.desk` on ProjectManifest (D-034);
+attach seeds project-local desk_policy.mode; omitted keeps local values.
+Optional `policy.k` / `policy.rejuvenation_every` / `policy.plateau_window`
+(D-036) seed the remaining desk tunables; omitted keeps local values
+(defaults 10 / 8 / 5). Optional `policy.digest_cap` (D-038) seeds the
+rich-digest off-desk row cap; omitted keeps the local value (default 30).
 
 ## Q2 — Pauses: parallel async execution; promotion policy is pluggable
 - After DESIGN, KAV continues working on other hypotheses while the host executes
   asynchronously. The loop is event-driven (wakes on result ingestion).
+  Implemented as D-030 (`dispatch_pending` / `collect_finished` / OBSERVE wakes).
+  Owner-chosen per project via optional `policy.max_inflight` on ProjectManifest
+  (D-035); attach seeds project-local `execution_policy.max_inflight`; omitted
+  keeps local values (default 2). Declared wall time is honored as a timeout
+  result (D-039): spec `budget.max_wall_time_seconds`, else the manifest
+  ceiling; omitted stays unbounded. KAV stops waiting; it does not kill the
+  host evaluator.
 - Promotion policy is a **pluggable component** with two V1 modes:
   - `manual` (default): every promotion requires human approval.
   - `auto_guarded`: auto-promote only when improvement exceeds threshold on N
     independent confirmations AND no forbidden-action violations; human notified.
   Long-run goal: graduated autonomy — the owner chooses per project via manifest/policy.
+  Implemented as D-032 + D-033: optional `policy.promotion` on ProjectManifest
+  (`manual` default if omitted, or `auto_guarded`) plus optional `min_delta` /
+  `confirmations`; attach seeds project-local promotion_policy from those
+  declarations. Omitted tunables keep local values.
 
 ## Q3 — Failures: finding-always + circuit-breaker
 - Every failed/timeout/rejected run routes through normal analysis and distills
   a finding (principle 8.12).
-- Circuit breaker: 3 consecutive failures of structurally similar specs → halt
+- Circuit breaker: N consecutive failures of structurally similar specs → halt
   the current strategy, raise a systemic-issue alert to the human.
+  Implemented as D-027 (halt + operational alert; default N=3).
+  Owner-chosen per project via optional `policy.circuit_breaker` on
+  ProjectManifest (D-037); attach seeds project-local
+  `circuit_policy.threshold`; omitted keeps local values (default 3).
 
 ## Laws check
-L1 ✓ host still measures · L2 ✓ budgets unchanged · L3 ✓ every route produces
-lineage-traced findings · L4 ✓ all memory project-local · L5 ✓ no new host demands.
+L1 ✓ host still measures · L2 ✓ declared wall time is enforced as timeout ·
+L3 ✓ every route produces lineage-traced findings · L4 ✓ all memory
+project-local · L5 ✓ no new host demands.

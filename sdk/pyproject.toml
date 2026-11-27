@@ -1,7 +1,7 @@
 [project]
 name = "kav-sdk"
 version = "0.1.0"
-description = "KAV contracts as Python: Pydantic models for the five adapter/research contracts"
+description = "KAV contracts as Python: Pydantic models, project memory, Host Adapter v0.1, HTTP/OpenAPI projection, circuit-breaker halt (optional policy.circuit_breaker), auto_guarded promotion via host manifest (optional min_delta / confirmations), minimal desk + rejuvenation, rich-history digest (optional policy.desk / k / rejuvenation_every / plateau_window / digest_cap), optional policy.max_inflight, declared wall-time timeout"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7"]
 
