@@ -24,7 +24,8 @@ approaches + **rich-history digest** as a desk config (`minimal` default;
 `policy.digest_cap` on the
 host manifest) + **event-driven wake** (issue
 further hypotheses while the host runs; OBSERVE consumes `result_ingested`
-wakes; optional `policy.max_inflight` on the host manifest). Contracts, SDK,
+wakes; optional `policy.max_inflight` on the host manifest; declared
+`max_wall_time_seconds` is honored as a `timeout` result). Contracts, SDK,
 memory, and the deterministic research cycle are implemented; live LLM-driven
 cycles remain experimental.
 
@@ -60,7 +61,7 @@ Hypothesis → Bounded Experiment → Trusted Evidence → Memory → Better Hyp
 | Execute | Host (adapter) | Runs experiment; KAV never touches the evaluator |
 | Ingest | Host → KAV | `ExperimentResult` — measurement as reported, failures included |
 | Distill | KAV | `ResearchFinding` — durable knowledge with lineage |
-| Promote | Policy (V1) | Host manifest `policy.promotion`: `manual` (default, human `promote` tool) or `auto_guarded` (D-028 / D-032); optional `min_delta` / `confirmations` (D-033); optional desk tunables (D-036); optional `digest_cap` (D-038); optional `max_inflight` (D-035); optional `circuit_breaker` (D-037) |
+| Promote | Policy (V1) | Host manifest `policy.promotion`: `manual` (default, human `promote` tool) or `auto_guarded` (D-028 / D-032); optional `min_delta` / `confirmations` (D-033); optional desk tunables (D-036); optional `digest_cap` (D-038); optional `max_inflight` (D-035); optional `circuit_breaker` (D-037); declared wall time as `timeout` (D-039) |
 
 See [docs/architecture.md](docs/architecture.md) for control-plane vs.
 execution-plane separation and adapter operations.

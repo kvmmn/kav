@@ -4,10 +4,11 @@ The JSON Schemas in contracts/ remain canonical (ADR-003, D-008, D-009).
 This module is the Python library transport: attach a host, drain issued
 specs, ingest host-reported results. HTTP/OpenAPI lives in `kav_sdk.http`
 (D-026). Event-driven dispatch (D-030) starts host runs without blocking
-the control plane.
+the control plane. Declared wall time is honored as `status=timeout` (D-039).
 """
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, Protocol, runtime_checkable
@@ -171,13 +172,13 @@ class HostRunner:
         tests. Stops without running further specs once the circuit breaker has
         halted the strategy (D-027). Already-ingested results stay recorded.
         Also waits for any async in-flight runs started via `dispatch_pending`.
+        Honors declared wall time the same way as `_run_one` (D-039).
         """
         n = self.collect_finished(timeout=None)
         for spec in self.memory.pending_specs():
             if self.memory.is_halted():
                 break
-            raw = self.adapter.run_experiment(spec)
-            reported = self.adapter.report_result(raw)
+            reported = self._run_one(spec)
             self._ingest(reported.model_dump_json())
             n += 1
         return n
@@ -196,5 +197,57 @@ class HostRunner:
         return self._pool
 
     def _run_one(self, spec: ExperimentSpec) -> ExperimentResult:
+        """Invoke the host; honor declared wall time as a timeout result (D-039).
+
+        Wall seconds come from the spec budget, else the manifest ceiling.
+        Omitted wall time stays unbounded (existing specs keep working).
+        On timeout KAV records `status=timeout` and frees the in-flight slot.
+        The host thread may still finish — KAV does not kill the evaluator
+        (Law 1); it stops waiting (Law 2).
+        """
+        wall = self._wall_seconds(spec)
+        if wall is None:
+            return self._invoke_host(spec)
+        result: ExperimentResult | None = None
+        error: BaseException | None = None
+        done = threading.Event()
+
+        def work() -> None:
+            nonlocal result, error
+            try:
+                result = self._invoke_host(spec)
+            except BaseException as exc:
+                error = exc
+            finally:
+                done.set()
+
+        threading.Thread(
+            target=work, name=f"kav-host-{spec.experiment_id}", daemon=True
+        ).start()
+        if done.wait(timeout=wall):
+            if error is not None:
+                raise error
+            assert result is not None
+            return result
+        return ExperimentResult(
+            experiment_id=spec.experiment_id,
+            status=ResultStatus.timeout,
+            error=ErrorInfo(
+                code="wall_time_exceeded",
+                message=(
+                    f"host run exceeded declared max_wall_time_seconds={wall}"
+                ),
+            ),
+        )
+
+    def _invoke_host(self, spec: ExperimentSpec) -> ExperimentResult:
         raw = self.adapter.run_experiment(spec)
         return self.adapter.report_result(raw)
+
+    def _wall_seconds(self, spec: ExperimentSpec) -> int | None:
+        if spec.budget.max_wall_time_seconds is not None:
+            return spec.budget.max_wall_time_seconds
+        manifest = self.memory.get_manifest()
+        if manifest is None:
+            return None
+        return manifest.constraints.max_budget_per_experiment.max_wall_time_seconds

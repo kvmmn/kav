@@ -22,7 +22,10 @@ rich-digest off-desk row cap; omitted keeps the local value (default 30).
   Implemented as D-030 (`dispatch_pending` / `collect_finished` / OBSERVE wakes).
   Owner-chosen per project via optional `policy.max_inflight` on ProjectManifest
   (D-035); attach seeds project-local `execution_policy.max_inflight`; omitted
-  keeps local values (default 2).
+  keeps local values (default 2). Declared wall time is honored as a timeout
+  result (D-039): spec `budget.max_wall_time_seconds`, else the manifest
+  ceiling; omitted stays unbounded. KAV stops waiting; it does not kill the
+  host evaluator.
 - Promotion policy is a **pluggable component** with two V1 modes:
   - `manual` (default): every promotion requires human approval.
   - `auto_guarded`: auto-promote only when improvement exceeds threshold on N
@@ -44,5 +47,6 @@ rich-digest off-desk row cap; omitted keeps the local value (default 30).
   `circuit_policy.threshold`; omitted keeps local values (default 3).
 
 ## Laws check
-L1 ✓ host still measures · L2 ✓ budgets unchanged · L3 ✓ every route produces
-lineage-traced findings · L4 ✓ all memory project-local · L5 ✓ no new host demands.
+L1 ✓ host still measures · L2 ✓ declared wall time is enforced as timeout ·
+L3 ✓ every route produces lineage-traced findings · L4 ✓ all memory
+project-local · L5 ✓ no new host demands.

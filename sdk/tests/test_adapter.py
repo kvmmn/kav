@@ -1,5 +1,6 @@
-"""Tests for Host Adapter v0.1 (D-025) and event-driven dispatch (D-030)."""
+"""Tests for Host Adapter v0.1 (D-025) and event-driven dispatch (D-030 / D-039)."""
 import threading
+import time
 
 import pytest
 
@@ -398,4 +399,103 @@ def test_dispatch_is_noop_when_halted(mem):
     assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada404"]
     assert runner.dispatch_pending() == 0
     assert [s.experiment_id for s in mem.pending_specs()] == ["exp-ada404"]
+    runner.close()
+
+
+def test_drain_times_out_when_spec_declares_wall_time(mem):
+    def hang(_params):
+        time.sleep(30)
+        return 0.5
+
+    capped = manifest().model_copy(
+        update={
+            "constraints": Constraints(
+                max_budget_per_experiment=Budget(
+                    max_compute_hours=2, max_wall_time_seconds=5
+                )
+            )
+        }
+    )
+    runner = HostRunner(mem, SimulatedHost(capped, space(), hang))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    bounded = spec().model_copy(update={"budget": Budget(max_wall_time_seconds=1)})
+    tools["issue_spec"](bounded.model_dump_json())
+    assert runner.drain_pending() == 1
+    row = mem.get_experiment("exp-ada001")
+    assert row["status"] == "timeout"
+    runner.close()
+
+
+def test_dispatch_times_out_when_spec_declares_wall_time(mem):
+    started = threading.Event()
+
+    def hang(_params):
+        started.set()
+        time.sleep(30)
+        return 0.5
+
+    capped = manifest().model_copy(
+        update={
+            "constraints": Constraints(
+                max_budget_per_experiment=Budget(
+                    max_compute_hours=2, max_wall_time_seconds=5
+                )
+            )
+        }
+    )
+    runner = HostRunner(mem, SimulatedHost(capped, space(), hang))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    bounded = spec("exp-ada501").model_copy(
+        update={"budget": Budget(max_wall_time_seconds=1)}
+    )
+    tools["issue_spec"](bounded.model_dump_json())
+    assert runner.dispatch_pending() == 1
+    assert started.wait(timeout=5)
+    assert runner.collect_finished(timeout=3) == 1
+    assert mem.get_experiment("exp-ada501")["status"] == "timeout"
+    runner.close()
+
+
+def test_manifest_wall_time_applies_when_spec_omits_it(mem):
+    def hang(_params):
+        time.sleep(30)
+        return 0.5
+
+    capped = manifest().model_copy(
+        update={
+            "constraints": Constraints(
+                max_budget_per_experiment=Budget(max_wall_time_seconds=1)
+            )
+        }
+    )
+    runner = HostRunner(mem, SimulatedHost(capped, space(), hang))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    tools["issue_spec"](spec("exp-ada601").model_dump_json())
+    assert runner.drain_pending() == 1
+    assert mem.get_experiment("exp-ada601")["status"] == "timeout"
+    runner.close()
+
+
+def test_declared_wall_time_still_completes_fast_host(mem):
+    capped = manifest().model_copy(
+        update={
+            "constraints": Constraints(
+                max_budget_per_experiment=Budget(
+                    max_compute_hours=2, max_wall_time_seconds=5
+                )
+            )
+        }
+    )
+    runner = HostRunner(mem, SimulatedHost(capped, space(), true_metric))
+    runner.attach()
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    bounded = spec("exp-ada701").model_copy(
+        update={"budget": Budget(max_wall_time_seconds=5)}
+    )
+    tools["issue_spec"](bounded.model_dump_json())
+    assert runner.drain_pending() == 1
+    assert mem.get_experiment("exp-ada701")["status"] == "completed"
     runner.close()
