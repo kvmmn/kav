@@ -58,6 +58,22 @@ class EvaluatorDecl(BaseModel):
 
 
 @_strict
+class PolicyDecl(BaseModel):
+    """Owner-chosen V1 autonomy (ADR-004 / D-032–D-038). Declarations only."""
+
+    promotion: Literal["manual", "auto_guarded"] = "manual"
+    min_delta: float | None = Field(default=None, ge=0)
+    confirmations: int | None = Field(default=None, ge=1)
+    desk: Literal["minimal", "rich_digest"] | None = None
+    k: int | None = Field(default=None, ge=1)
+    rejuvenation_every: int | None = Field(default=None, ge=1)
+    plateau_window: int | None = Field(default=None, ge=1)
+    digest_cap: int | None = Field(default=None, ge=1)
+    max_inflight: int | None = Field(default=None, ge=1)
+    circuit_breaker: int | None = Field(default=None, ge=1)
+
+
+@_strict
 class Constraints(BaseModel):
     max_budget_per_experiment: Budget
     forbidden_actions: list[str] = Field(default_factory=list)
@@ -80,6 +96,67 @@ class ProjectManifest(BaseModel):
     objective: Objective
     constraints: Constraints
     evaluator: EvaluatorDecl
+    policy: PolicyDecl | None = None
+
+    def promotion_mode(self) -> str:
+        """Manifest is the source of truth on attach; omitted policy is manual."""
+        if self.policy is None:
+            return "manual"
+        return self.policy.promotion
+
+    def promotion_min_delta(self) -> float | None:
+        """Declared threshold, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.min_delta
+
+    def promotion_confirmations(self) -> int | None:
+        """Declared confirmation count, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.confirmations
+
+    def desk_mode(self) -> str | None:
+        """Declared desk mode, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.desk
+
+    def desk_k(self) -> int | None:
+        """Declared desk k, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.k
+
+    def desk_rejuvenation_every(self) -> int | None:
+        """Declared rejuvenation cadence, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.rejuvenation_every
+
+    def desk_plateau_window(self) -> int | None:
+        """Declared plateau window, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.plateau_window
+
+    def desk_digest_cap(self) -> int | None:
+        """Declared digest truncation cap, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.digest_cap
+
+    def execution_max_inflight(self) -> int | None:
+        """Declared in-flight cap, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.max_inflight
+
+    def circuit_breaker_threshold(self) -> int | None:
+        """Declared halt streak, or None to keep the project-local tunable."""
+        if self.policy is None:
+            return None
+        return self.policy.circuit_breaker
 
 
 # ------------------------------------------------------------ SearchSpace

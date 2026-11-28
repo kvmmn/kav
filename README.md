@@ -9,8 +9,26 @@ policy.
 > **Think. Test. Learn.**
 
 **Author:** [Kaveh Momeni](https://github.com/kvmmn)  
-**Status:** v0.1 foundation — contracts, SDK, memory layer, and deterministic
-research cycle are implemented; live LLM-driven cycles are experimental.
+**Status:** v0.1 — foundation + live cycle + Host Adapter v0.1 (in-process
+`HostAdapter` / `SimulatedHost` / `HostRunner`) + HTTP/OpenAPI projection of
+the four adapter operations + circuit-breaker **halt** (three similar consecutive
+failures stop the strategy and alert a human; optional `policy.circuit_breaker`
+on the host manifest) + pluggable promotion chosen per
+project via the host manifest (`policy.promotion`: `manual` default;
+`auto_guarded` when N independent confirmations beat the champion; optional
+`min_delta` / `confirmations`) +
+**minimal desk** (champion + top-k) with deliberate **rejuvenation** of discarded
+approaches + **rich-history digest** as a desk config (`minimal` default;
+`rich_digest` adds compact off-desk history; optional `policy.desk` /
+`policy.k` / `policy.rejuvenation_every` / `policy.plateau_window` /
+`policy.digest_cap` on the
+host manifest) + **event-driven wake** (issue
+further hypotheses while the host runs; OBSERVE consumes `result_ingested`
+wakes; optional `policy.max_inflight` on the host manifest; declared
+`max_wall_time_seconds` is honored as a `timeout` result) + **finding-always**
+on failed/timeout/rejected ingest (one `inconclusive` finding with lineage).
+Contracts, SDK, memory, and the deterministic research cycle are implemented;
+live LLM-driven cycles remain experimental.
 
 ---
 
@@ -38,13 +56,13 @@ Hypothesis → Bounded Experiment → Trusted Evidence → Memory → Better Hyp
 
 | Stage | Actor | Output |
 |-------|-------|--------|
-| Observe | KAV | Champion config, active findings, circuit-breaker state |
+| Observe | KAV | Desk (champion + top-k + rejuvenated; optional rich-history digest), circuit-breaker state |
 | Hypothesize | KAV | One falsifiable claim within the search space |
 | Design | KAV | `ExperimentSpec` — single change, fixed budget, reproducible seed |
 | Execute | Host (adapter) | Runs experiment; KAV never touches the evaluator |
 | Ingest | Host → KAV | `ExperimentResult` — measurement as reported, failures included |
 | Distill | KAV | `ResearchFinding` — durable knowledge with lineage |
-| Promote | Human (V1 default) | Champion update only after explicit approval |
+| Promote | Policy (V1) | Host manifest `policy.promotion`: `manual` (default, human `promote` tool) or `auto_guarded` (D-028 / D-032); optional `min_delta` / `confirmations` (D-033); optional desk tunables (D-036); optional `digest_cap` (D-038); optional `max_inflight` (D-035); optional `circuit_breaker` (D-037); declared wall time as `timeout` (D-039); finding-always on non-completed ingest (D-040) |
 
 See [docs/architecture.md](docs/architecture.md) for control-plane vs.
 execution-plane separation and adapter operations.
@@ -72,7 +90,7 @@ KAV attaches to a host through four operations defined in [contracts/](contracts
 
 | Operation | Schema | Purpose |
 |-----------|--------|---------|
-| Register manifest | `project-manifest.schema.json` | Objective, constraints, evaluator ownership |
+| Register manifest | `project-manifest.schema.json` | Objective, constraints, evaluator ownership, optional promotion policy, thresholds, desk mode, and circuit-breaker threshold |
 | Declare search space | `search-space.schema.json` | Bounded, typed parameters and defaults |
 | Issue experiment | `experiment-spec.schema.json` | Single-change, budgeted, reproducible spec |
 | Report result | `experiment-result.schema.json` | Host-reported measurement and artifacts |
@@ -87,8 +105,8 @@ schema-first, language bindings second).
 
 | Path | Description |
 |------|-------------|
-| [contracts/](contracts/) | Canonical JSON Schemas (v0.1) |
-| [sdk/](sdk/) | `kav-sdk` — Pydantic models, project-local SQLite memory, whitelisted tools |
+| [contracts/](contracts/) | Canonical JSON Schemas (v0.1) plus OpenAPI 3.0 for the HTTP adapter |
+| [sdk/](sdk/) | `kav-sdk` — Pydantic models, project-local SQLite memory, Host Adapter v0.1, HTTP/OpenAPI projection, whitelisted tools |
 | [examples/](examples/) | Deterministic walkthrough and contract stress tests |
 | [docs/](docs/) | Architecture, ADRs, decision log, method notes |
 | [docs/adr/](docs/adr/) | Architecture Decision Records (immutable once accepted) |
@@ -111,8 +129,8 @@ python3 examples/walkthrough_one_cycle.py
 ```
 
 The walkthrough simulates the full loop — observe → hypothesize → validate →
-issue → ingest → distill → promote — using in-memory tools and a temporary
-SQLite store.
+issue → HostRunner dispatch (async) / collect → distill → promote — using
+in-memory tools, a SimulatedHost, and a temporary SQLite store.
 
 Optional: `examples/live_one_cycle.py` runs an LLM-driven cycle when
 `OPENROUTER_API_KEY` is set. This path is experimental and not required to

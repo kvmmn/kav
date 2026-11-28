@@ -4,9 +4,9 @@ from pydantic import ValidationError
 
 from kav_sdk import (
     Budget, Change, Constraints, Domain, EvaluatorDecl, ExperimentResult,
-    ExperimentSpec, FindingKind, Objective, Parameter, ProjectManifest,
-    Reproducibility, ResearchFinding, ResultStatus, SearchSpace,
-    validate_spec_against_project, SpecValidationError,
+    ExperimentSpec, FindingKind, Objective, Parameter, PolicyDecl,
+    ProjectManifest, Reproducibility, ResearchFinding, ResultStatus,
+    SearchSpace, validate_spec_against_project, SpecValidationError,
 )
 
 
@@ -125,3 +125,168 @@ def test_budget_covers_logic():
     assert big.covers(small)
     assert not small.covers(big)
     assert not unlimited.covers(small)  # None cannot cover a concrete limit
+
+
+# ---- graduated autonomy via manifest (D-032)
+def test_omitted_policy_is_manual():
+    m = manifest()
+    assert m.policy is None
+    assert m.promotion_mode() == "manual"
+
+
+def test_policy_promotion_auto_guarded():
+    m = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m.promotion_mode() == "auto_guarded"
+
+
+def test_empty_policy_object_defaults_manual():
+    m = manifest(policy=PolicyDecl())
+    assert m.promotion_mode() == "manual"
+
+
+def test_unknown_promotion_mode_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"promotion": "full_auto"})
+
+
+def test_policy_thresholds_optional():
+    m = manifest(policy=PolicyDecl(
+        promotion="auto_guarded", min_delta=0.05, confirmations=4,
+    ))
+    assert m.promotion_min_delta() == 0.05
+    assert m.promotion_confirmations() == 4
+
+
+def test_omitted_thresholds_are_none():
+    m = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m.promotion_min_delta() is None
+    assert m.promotion_confirmations() is None
+    m2 = manifest()
+    assert m2.promotion_min_delta() is None
+    assert m2.promotion_confirmations() is None
+
+
+def test_zero_min_delta_is_declared():
+    m = manifest(policy=PolicyDecl(min_delta=0))
+    assert m.promotion_min_delta() == 0
+
+
+def test_negative_min_delta_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"min_delta": -0.01})
+
+
+def test_confirmations_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"confirmations": 0})
+
+
+# ---- desk mode via manifest (D-034)
+def test_omitted_desk_is_none():
+    m = manifest()
+    assert m.desk_mode() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.desk_mode() is None
+
+
+def test_policy_desk_rich_digest():
+    m = manifest(policy=PolicyDecl(desk="rich_digest"))
+    assert m.desk_mode() == "rich_digest"
+
+
+def test_policy_desk_minimal():
+    m = manifest(policy=PolicyDecl(desk="minimal"))
+    assert m.desk_mode() == "minimal"
+
+
+def test_unknown_desk_mode_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"desk": "verbose"})
+
+
+# ---- max_inflight via manifest (D-035)
+def test_omitted_max_inflight_is_none():
+    m = manifest()
+    assert m.execution_max_inflight() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.execution_max_inflight() is None
+
+
+def test_policy_max_inflight_declared():
+    m = manifest(policy=PolicyDecl(max_inflight=4))
+    assert m.execution_max_inflight() == 4
+
+
+def test_max_inflight_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"max_inflight": 0})
+
+
+# ---- desk tunables via manifest (D-036)
+def test_omitted_desk_tunables_are_none():
+    m = manifest()
+    assert m.desk_k() is None
+    assert m.desk_rejuvenation_every() is None
+    assert m.desk_plateau_window() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.desk_k() is None
+    assert m2.desk_rejuvenation_every() is None
+    assert m2.desk_plateau_window() is None
+
+
+def test_policy_desk_tunables_declared():
+    m = manifest(policy=PolicyDecl(k=5, rejuvenation_every=3, plateau_window=4))
+    assert m.desk_k() == 5
+    assert m.desk_rejuvenation_every() == 3
+    assert m.desk_plateau_window() == 4
+
+
+def test_desk_k_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"k": 0})
+
+
+def test_rejuvenation_every_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"rejuvenation_every": 0})
+
+
+def test_plateau_window_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"plateau_window": 0})
+
+
+# ---- circuit_breaker via manifest (D-037)
+def test_omitted_circuit_breaker_is_none():
+    m = manifest()
+    assert m.circuit_breaker_threshold() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.circuit_breaker_threshold() is None
+
+
+def test_policy_circuit_breaker_declared():
+    m = manifest(policy=PolicyDecl(circuit_breaker=2))
+    assert m.circuit_breaker_threshold() == 2
+
+
+def test_circuit_breaker_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"circuit_breaker": 0})
+
+
+# ---- digest_cap via manifest (D-038)
+def test_omitted_digest_cap_is_none():
+    m = manifest()
+    assert m.desk_digest_cap() is None
+    m2 = manifest(policy=PolicyDecl(promotion="auto_guarded"))
+    assert m2.desk_digest_cap() is None
+
+
+def test_policy_digest_cap_declared():
+    m = manifest(policy=PolicyDecl(digest_cap=5))
+    assert m.desk_digest_cap() == 5
+
+
+def test_digest_cap_below_one_rejected():
+    with pytest.raises(ValidationError):
+        manifest(policy={"digest_cap": 0})
