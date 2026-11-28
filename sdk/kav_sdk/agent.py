@@ -47,8 +47,12 @@ YOUR LOOP:
 - Draft an ExperimentSpec as JSON matching the contract; check_spec() it;
   if INVALID, fix and re-check; if VALID, issue_spec() it. Note: the spec's
   reproducibility object requires a "seed" (integer).
-- After results arrive (ingest_result by the runner), analyze and record_finding()
-  with kind confirmed/refuted/harmful/inconclusive/operational and full lineage.
+- After results arrive (ingest_result by the runner), failed/timeout/rejected
+  already have an `inconclusive` finding (D-040). For completed evidence,
+  analyze and record_finding() with kind confirmed/refuted/harmful and
+  full lineage. You may supersede the auto-written inconclusive finding
+  with a richer analysis; do not reinterpret a missing measurement as
+  refuted.
 - If evidence beats the champion: promotion mode comes from the host manifest
   (`policy.promotion`, D-032; omitted = manual). Optional `policy.min_delta`
   and `policy.confirmations` (D-033) seed the auto_guarded gates; omitted

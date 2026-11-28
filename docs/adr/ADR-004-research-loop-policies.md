@@ -39,6 +39,10 @@ rich-digest off-desk row cap; omitted keeps the local value (default 30).
 ## Q3 — Failures: finding-always + circuit-breaker
 - Every failed/timeout/rejected run routes through normal analysis and distills
   a finding (principle 8.12).
+  Implemented as D-040: ingest writes one `inconclusive` finding with lineage
+  to the experiment (confidence 0.4 so it does not crowd the desk). Completed
+  results stay agent-distilled. Missing measurement is not treated as refuted
+  (Law 1).
 - Circuit breaker: N consecutive failures of structurally similar specs → halt
   the current strategy, raise a systemic-issue alert to the human.
   Implemented as D-027 (halt + operational alert; default N=3).

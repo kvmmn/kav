@@ -413,6 +413,59 @@ class ProjectMemory:
         ).fetchone()
         return dict(row) if row else None
 
+    def record_noncompletion_finding(
+        self, result: ExperimentResult
+    ) -> ResearchFinding | None:
+        """Distill a lineage-traced finding for failed/timeout/rejected (D-040).
+
+        ADR-004 Q3 / principle 8.12: every non-completed run becomes a finding.
+        Kind is `inconclusive` — KAV does not reinterpret a missing measurement
+        as refuted (Law 1). Completed results stay agent-distilled. Idempotent
+        on finding_id so a second ingest does not double-write.
+        """
+        if result.status.value not in _FAIL_STATUSES:
+            return None
+        suffix = result.experiment_id.removeprefix("exp-")
+        fid = f"fnd-fail-{suffix}"[:68]
+        if self._finding_exists(fid):
+            row = self.conn.execute(
+                "SELECT data FROM findings WHERE finding_id=?", (fid,)
+            ).fetchone()
+            return ResearchFinding.model_validate_json(row["data"]) if row else None
+        row = self.get_experiment(result.experiment_id)
+        if row is None:
+            raise KeyError(f"unknown experiment: {result.experiment_id}")
+        spec = ExperimentSpec.model_validate_json(row["spec"])
+        code = result.error.code if result.error else "unknown"
+        message = (result.error.message if result.error else "no measurement")[:180]
+        cost = None
+        if result.evidence.cost_actual is not None:
+            cost = result.evidence.cost_actual.cost_units
+        finding = ResearchFinding(
+            finding_id=fid,
+            project_id=self.project_id,
+            experiment_id=result.experiment_id,
+            hypothesis_id=spec.hypothesis_id,
+            kind="inconclusive",
+            statement=(
+                f"Experiment {result.experiment_id} ended as {result.status.value} "
+                f"({code}): {message}"
+            ),
+            confidence=0.4,
+            tags=list(dict.fromkeys(
+                ["noncompletion", result.status.value, code]
+            )),
+            conditions={
+                "config_snapshot": {
+                    "status": result.status.value,
+                    "error_code": code,
+                }
+            },
+            metrics={"cost_units": cost} if cost is not None else {},
+        )
+        self.save_finding(finding)
+        return finding
+
     def evaluate_circuit_breaker(self, result: ExperimentResult) -> bool:
         """Halt + operational alert when N similar consecutive failures land (D-027 / D-037).
 

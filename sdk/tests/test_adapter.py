@@ -293,6 +293,10 @@ def test_failed_host_run_is_ingested(mem):
     row = mem.get_experiment("exp-ada001")
     assert row["status"] == "failed"
     assert mem.pending_specs() == []
+    misses = mem.active_findings(kinds=["inconclusive"])
+    assert len(misses) == 1
+    assert misses[0].experiment_id == "exp-ada001"
+    assert "noncompletion" in misses[0].tags
 
 
 def test_evaluate_may_return_full_result(mem):
@@ -424,6 +428,10 @@ def test_drain_times_out_when_spec_declares_wall_time(mem):
     assert runner.drain_pending() == 1
     row = mem.get_experiment("exp-ada001")
     assert row["status"] == "timeout"
+    misses = mem.active_findings(kinds=["inconclusive"])
+    assert len(misses) == 1
+    assert misses[0].experiment_id == "exp-ada001"
+    assert "timeout" in misses[0].tags
     runner.close()
 
 

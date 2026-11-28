@@ -72,6 +72,7 @@ print("   pending:", [s.experiment_id for s in mem.pending_specs()],
       "| inflight:", [s.experiment_id for s in mem.inflight_specs()])
 print("   COLLECTED:", runner.collect_finished(timeout=5), "result(s) → wakes queued")
 print("   DRAIN remaining:", runner.drain_pending(), "spec(s)")
+assert mem.active_findings() == [], "completed results stay agent-distilled (D-040)"
 
 print("6. DISTILL finding")
 finding = ResearchFinding(

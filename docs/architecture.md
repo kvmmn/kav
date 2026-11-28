@@ -152,6 +152,10 @@ Each project receives an isolated SQLite store (Law 4, ADR-002):
   chooses N per project via optional `policy.circuit_breaker` on the
   manifest; attach seeds project-local `circuit_policy.threshold`; omitted
   keeps the local value (default 3). Resume is human-gated.
+- **Finding-always** on non-completed ingest (ADR-004 Q3 / D-040):
+  `failed` / `timeout` / `rejected` write one `inconclusive` finding with
+  experiment lineage. Completed results stay agent-distilled. KAV does not
+  reinterpret a missing measurement as refuted (Law 1).
 - **Promotion policy** is pluggable (ADR-004 Q2 / D-028 / D-032 / D-033): the
   host chooses per project via optional `policy.promotion` on the manifest
   (`manual` default if omitted, or `auto_guarded`) and optional
@@ -189,10 +193,10 @@ requires a new ADR — never an implicit shortcut.
 | Component | Location | Notes |
 |-----------|----------|-------|
 | Contract models | `sdk/kav_sdk/models.py` | Pydantic; enforces Laws 1–3 in validation |
-| Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO; in-flight + wakes (D-030) |
+| Project memory | `sdk/kav_sdk/memory.py` | SQLite per project; `pending_specs()` FIFO; in-flight + wakes (D-030); finding-always on non-completed ingest (D-040) |
 | Host adapter | `sdk/kav_sdk/adapter.py` | In-process projection of the four operations; `SimulatedHost` + `HostRunner` (D-025); `dispatch_pending` / `collect_finished` (D-030); declared wall-time timeout (D-039) |
 | HTTP adapter | `sdk/kav_sdk/http.py` | OpenAPI 3.0 projection of the same four operations; stdlib server + `HttpHostAdapter` (D-026) |
-| Whitelisted tools | `sdk/kav_sdk/tools.py` | Eight deterministic tools wrapping SDK + memory (`resume_strategy` and `rejuvenate` are human-gated; `promote` is the human override) |
+| Whitelisted tools | `sdk/kav_sdk/tools.py` | Eight deterministic tools wrapping SDK + memory (`resume_strategy` and `rejuvenate` are human-gated; `promote` is the human override; ingest auto-distills non-completed runs, D-040) |
 | Agent harness | `sdk/kav_sdk/agent.py` | Deep Agents on LangGraph (ADR-001); raw-graph escape hatch preserved |
 
 Tools are restricted to contract-shaped operations. Shell access, host filesystem

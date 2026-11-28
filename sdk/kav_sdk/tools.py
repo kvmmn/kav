@@ -78,9 +78,14 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
         return f"ISSUED {spec.experiment_id}"
 
     def ingest_result(result_json: str) -> str:
-        """INGEST node: record the host's honest report. Values stored as-is (Law 1)."""
+        """INGEST node: record the host's honest report. Values stored as-is (Law 1).
+
+        Failed/timeout/rejected runs also distill one `inconclusive` finding
+        (D-040 / ADR-004 Q3). Completed results stay agent-distilled.
+        """
         result = ExperimentResult.model_validate_json(result_json)
         memory.save_result(result)
+        recorded = memory.record_noncompletion_finding(result)
         halted = memory.evaluate_circuit_breaker(result)
         rejuvenated = memory.evaluate_rejuvenation()
         if halted:
@@ -88,7 +93,9 @@ def make_kav_tools(memory: ProjectMemory) -> list[Any]:
                 f"HALTED {result.experiment_id} status={result.status.value} "
                 "circuit-breaker alert recorded"
             )
-        extra = " REJUVENATED" if rejuvenated else ""
+        extra = " FINDING" if recorded else ""
+        if rejuvenated:
+            extra += " REJUVENATED"
         return f"RECORDED {result.experiment_id} status={result.status.value}{extra}"
 
     def resume_strategy() -> str:

@@ -173,6 +173,59 @@ def test_three_similar_failures_halt_and_alert(mem):
     assert alerts[0].experiment_id == "exp-f02003"
     assert "circuit breaker" in alerts[0].statement.lower()
     assert "circuit-breaker" in alerts[0].tags
+    misses = mem.active_findings(kinds=["inconclusive"])
+    assert {f.experiment_id for f in misses} == set(ids)
+
+
+def test_noncompletion_ingest_writes_inconclusive_finding(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-f05001"))
+    out = tools["ingest_result"](_failed("exp-f05001").model_dump_json())
+    assert "FINDING" in out
+    misses = mem.active_findings(kinds=["inconclusive"])
+    assert len(misses) == 1
+    assert misses[0].finding_id == "fnd-fail-f05001"
+    assert misses[0].kind.value == "inconclusive"
+    assert misses[0].hypothesis_id == "hyp-bbb222"
+    assert "noncompletion" in misses[0].tags
+    assert "failed" in misses[0].tags
+    assert misses[0].confidence == 0.4
+    again = tools["ingest_result"](_failed("exp-f05001").model_dump_json())
+    assert "FINDING" in again
+    assert len(mem.active_findings(kinds=["inconclusive"])) == 1
+
+
+def test_completed_ingest_does_not_auto_distill(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-ok0501"))
+    out = tools["ingest_result"](result("exp-ok0501", value=0.03).model_dump_json())
+    assert out.startswith("RECORDED")
+    assert "FINDING" not in out
+    assert mem.active_findings() == []
+
+
+def test_timeout_and_rejected_ingest_write_findings(mem):
+    from kav_sdk.tools import make_kav_tools
+
+    tools = {t.__name__: t for t in make_kav_tools(mem)}
+    mem.save_spec(spec("exp-f06001"))
+    mem.save_spec(spec("exp-f06002"))
+    tools["ingest_result"](ExperimentResult(
+        experiment_id="exp-f06001", status="timeout",
+        error={"code": "wall_time_exceeded", "message": "host run exceeded declared wall time"},
+    ).model_dump_json())
+    tools["ingest_result"](ExperimentResult(
+        experiment_id="exp-f06002", status="rejected",
+        error={"code": "spec_rejected", "message": "host refused the spec"},
+    ).model_dump_json())
+    misses = {f.experiment_id: f for f in mem.active_findings(kinds=["inconclusive"])}
+    assert set(misses) == {"exp-f06001", "exp-f06002"}
+    assert "timeout" in misses["exp-f06001"].tags
+    assert "rejected" in misses["exp-f06002"].tags
 
 
 def test_dissimilar_failures_do_not_halt(mem):
